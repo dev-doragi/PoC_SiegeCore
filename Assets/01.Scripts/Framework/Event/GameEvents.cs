@@ -76,6 +76,16 @@ public struct LookInputEvent
     public Vector2 Value;
 }
 
+/// <summary>Any energy pool can publish its owner and current capacity.</summary>
+public struct EnergyChangedEvent
+{
+    public UnityEngine.Object Source;
+    public float Current;
+    public float Max;
+
+    public float Normalized => Max > 0f ? Mathf.Clamp01(Current / Max) : 0f;
+}
+
 public struct SubmitInputEvent { }
 public struct CancelInputEvent { }
 public struct PauseInputEvent { }
