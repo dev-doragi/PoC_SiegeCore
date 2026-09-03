@@ -1,0 +1,19 @@
+public enum GameLogEventType
+{
+    None,
+    ApplicationStarted,
+    ApplicationQuit,
+    GameStateChanged,
+    InGameStateChanged,
+    SceneLoadRequested,
+    SceneLoaded,
+    InputReceived,
+    PauseRequested,
+    ResumeRequested,
+    TimeScaleChanged,
+    CameraShakeRequested,
+    SoundRequested,
+    ObjectSpawned,
+    ObjectDespawned,
+    Custom
+}
