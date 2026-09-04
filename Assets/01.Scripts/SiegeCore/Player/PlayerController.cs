@@ -52,5 +52,10 @@ namespace SiegeCore.Player
             _motor.SetMoveInput(MoveInput);
 
         }
+
+        public void StopMovementFor(float duration)
+        {
+            if (_motor != null) _motor.StopMovementFor(duration);
+        }
     }
 }

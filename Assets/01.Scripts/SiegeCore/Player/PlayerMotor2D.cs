@@ -12,9 +12,11 @@ namespace SiegeCore.Player
 
         private Rigidbody2D _rigidbody;
         private Vector2 _moveInput;
+        private float _movementLockedUntil;
 
         public Vector2 Velocity => _rigidbody != null ? _rigidbody.linearVelocity : Vector2.zero;
-        public bool IsMoving => _moveInput.sqrMagnitude > 0.0001f;
+        public bool IsMovementLocked => Time.time < _movementLockedUntil;
+        public bool IsMoving => !IsMovementLocked && _moveInput.sqrMagnitude > 0.0001f;
 
         private void Awake()
         {
@@ -25,6 +27,11 @@ namespace SiegeCore.Player
 
         private void FixedUpdate()
         {
+            if (IsMovementLocked)
+            {
+                _rigidbody.linearVelocity = Vector2.zero;
+                return;
+            }
             Vector2 currentVelocity = _rigidbody.linearVelocity;
             Vector2 targetVelocity = _moveInput * _maxSpeed;
 
@@ -45,8 +52,16 @@ namespace SiegeCore.Player
             _moveInput = Vector2.ClampMagnitude(input, 1f);
         }
 
+        public void StopMovementFor(float duration)
+        {
+            _movementLockedUntil = Mathf.Max(_movementLockedUntil, Time.time + Mathf.Max(0f, duration));
+            if (_rigidbody != null) _rigidbody.linearVelocity = Vector2.zero;
+            // Retain the latest input so held movement keys resume after the action.
+        }
+
         private void OnDisable()
         {
+            _movementLockedUntil = 0f;
             _moveInput = Vector2.zero;
 
             if (_rigidbody != null)

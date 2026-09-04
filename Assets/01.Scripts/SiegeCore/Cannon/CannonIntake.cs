@@ -7,6 +7,7 @@ namespace SiegeCore.Cannon
     public sealed class CannonIntake : MonoBehaviour
     {
         [SerializeField] private Cannon _cannon;
+        private float _nextBlockedLogTime;
 
         private void Awake()
         {
@@ -20,10 +21,28 @@ namespace SiegeCore.Cannon
 
         private void OnTriggerEnter2D(Collider2D other)
         {
+            TryLoad(other);
+        }
+
+        private void OnTriggerStay2D(Collider2D other)
+        {
+            TryLoad(other);
+        }
+
+        private void TryLoad(Collider2D other)
+        {
             if (!isActiveAndEnabled || _cannon == null) return;
             CarryableObject item = other.GetComponentInParent<CarryableObject>();
-            if (item == null || !item.IsAirborne || item.IsCannonFlight) return;
-            _cannon.TryLoad(item);
+            if (item == null || !item.CanEnterCannon) return;
+            if (_cannon.TryLoad(item, out string reason))
+            {
+                Debug.Log($"[CannonIntake] Loaded {item.name}. Queue: {_cannon.LoadedCount}", this);
+            }
+            else if (Time.time >= _nextBlockedLogTime)
+            {
+                _nextBlockedLogTime = Time.time + 1f;
+                Debug.LogWarning($"[CannonIntake] Overlapping {item.name}, loading blocked: {reason}", this);
+            }
         }
     }
 }

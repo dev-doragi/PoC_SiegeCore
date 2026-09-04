@@ -44,11 +44,14 @@ TagManager:
   - name: Tile
     uniqueID: 3714374079
     locked: 0
+  - name: Object
+    uniqueID: 1888895783
+    locked: 0
   - name: Player
     uniqueID: 3150613073
     locked: 0
-  - name: Objects
-    uniqueID: 1888895783
+  - name: Carried
+    uniqueID: 2085497699
     locked: 0
   m_RenderingLayers:
   - Default
