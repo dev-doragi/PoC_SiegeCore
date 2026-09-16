@@ -3521,12 +3521,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d49139186046c4448bcc48474db6ff89, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatFactory
-  _pool: {fileID: 1144848505}
-  _prefabs:
-  - {fileID: 2668117264886249552, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-  - {fileID: 8259745048396159277, guid: 26a27af7a3d344e40940e1f64f8df6c9, type: 3}
-  - {fileID: 7793670448139167708, guid: 24db32917948da64b808ffd930db0833, type: 3}
   _battlefield: {fileID: 1337687484}
+  _basicPool: {fileID: 11400000, guid: 0e0731ba57f04afea61ef001c8e6f180, type: 2}
+  _bbPool: {fileID: 11400000, guid: 76f62d533ebb42c28e2c6de71e311f21, type: 2}
+  _bbbPool: {fileID: 11400000, guid: 3c39686fa2184d548a07f1e11198d160, type: 2}
 --- !u!114 &1337687484
 MonoBehaviour:
   m_ObjectHideFlags: 0

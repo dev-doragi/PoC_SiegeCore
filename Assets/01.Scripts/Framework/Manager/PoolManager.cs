@@ -6,7 +6,7 @@ public class PoolManager : ManagedBehaviour
 {
     [SerializeField] private Transform _poolRoot;
     private Transform _creationRoot;
-    private readonly Dictionary<string, ObjectPool<GameObject>> _pools = new Dictionary<string, ObjectPool<GameObject>>();
+    private readonly Dictionary<PoolDefinition, ObjectPool<GameObject>> _pools = new Dictionary<PoolDefinition, ObjectPool<GameObject>>();
     private readonly HashSet<PooledObject> _active = new HashSet<PooledObject>();
 
     protected override void OnInitialize()
@@ -25,28 +25,37 @@ public class PoolManager : ManagedBehaviour
         }
     }
 
-    public void RegisterPool(string key, GameObject prefab, int defaultCapacity = 8, int maxSize = 64)
+    private ObjectPool<GameObject> GetOrCreatePool(PoolDefinition definition)
     {
-        if (!IsInitialized || string.IsNullOrWhiteSpace(key) || prefab == null || _pools.ContainsKey(key))
+        if (!IsInitialized || definition == null || definition.Prefab == null)
         {
-            throw new System.InvalidOperationException("Invalid or duplicate pool registration.");
+            throw new System.InvalidOperationException("Pool definition is invalid.");
         }
+
+        if (_pools.TryGetValue(definition, out ObjectPool<GameObject> existingPool))
+        {
+            return existingPool;
+        }
+
+        int defaultCapacity = Mathf.Max(1, definition.DefaultCapacity);
+        int maxSize = Mathf.Max(defaultCapacity, definition.MaxSize);
         ObjectPool<GameObject> pool = new ObjectPool<GameObject>(
-            createFunc: () => CreatePooledObject(key, prefab),
+            createFunc: () => CreatePooledObject(definition),
             actionOnGet: null,
             actionOnRelease: ReleasePooledObject,
             actionOnDestroy: DestroyPooledObject,
             collectionCheck: true,
-            defaultCapacity: Mathf.Max(1, defaultCapacity),
-            maxSize: Mathf.Max(1, maxSize));
+            defaultCapacity: defaultCapacity,
+            maxSize: maxSize);
 
-        _pools.Add(key, pool);
+        _pools.Add(definition, pool);
+        return pool;
     }
 
-    private GameObject CreatePooledObject(string key, GameObject prefab)
+    private GameObject CreatePooledObject(PoolDefinition definition)
     {
         // 소유 풀을 연결하기 전에 OnEnable이 실행되지 않도록 비활성 부모에서 생성합니다.
-        GameObject instance = Instantiate(prefab, _creationRoot);
+        GameObject instance = Instantiate(definition.Prefab, _creationRoot);
         instance.SetActive(false);
         instance.transform.SetParent(_poolRoot);
 
@@ -56,7 +65,7 @@ public class PoolManager : ManagedBehaviour
             handle = instance.AddComponent<PooledObject>();
         }
 
-        handle.Configure(this, key);
+        handle.Configure(this, definition);
         return instance;
     }
 
@@ -76,12 +85,9 @@ public class PoolManager : ManagedBehaviour
         Destroy(instance);
     }
 
-    public GameObject Spawn(string key, Vector3 position, Quaternion rotation)
+    public GameObject Spawn(PoolDefinition definition, Vector3 position, Quaternion rotation)
     {
-        if (!_pools.TryGetValue(key, out ObjectPool<GameObject> pool))
-        {
-            throw new System.InvalidOperationException($"Pool not found: {key}");
-        }
+        ObjectPool<GameObject> pool = GetOrCreatePool(definition);
         GameObject instance = pool.Get();
         PooledObject handle = instance.GetComponent<PooledObject>();
         _active.Add(handle);
@@ -90,19 +96,24 @@ public class PoolManager : ManagedBehaviour
         return instance;
     }
 
-    public void Despawn(string key, GameObject instance)
+    public void Despawn(PoolDefinition definition, GameObject instance)
     {
         if (instance == null)
         {
             return;
         }
         PooledObject handle = instance.GetComponent<PooledObject>();
-        if (handle == null || handle.Owner != this || handle.Key != key || !_active.Remove(handle))
+        if (handle == null || handle.Owner != this || handle.Definition != definition || !_active.Remove(handle))
         {
             Debug.LogError("[PoolManager] Foreign object or duplicate return.", this);
             return;
         }
-        _pools[key].Release(instance);
+        if (!_pools.TryGetValue(definition, out ObjectPool<GameObject> pool))
+        {
+            Debug.LogError("[PoolManager] Missing pool definition.", this);
+            return;
+        }
+        pool.Release(instance);
     }
 
     public void Despawn(GameObject instance)
@@ -117,7 +128,7 @@ public class PoolManager : ManagedBehaviour
             Debug.LogError("[PoolManager] Missing pool ownership.", this);
             return;
         }
-        Despawn(handle.Key, instance);
+        Despawn(handle.Definition, instance);
     }
 
     public void ClearAllPools()

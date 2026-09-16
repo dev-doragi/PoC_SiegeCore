@@ -8,21 +8,12 @@ namespace SiegeCore.Rat
         [SerializeField]
         private RatBattlefield _battlefield;
 
-        [Header("Prefabs")]
-        [SerializeField] private RatAgent _basicPrefab;
-        [SerializeField] private RatAgent _bbPrefab;
-        [SerializeField] private RatAgent _bbbPrefab;
-
-        [Header("Pool")]
-        [SerializeField, Min(1)] private int _defaultPoolCapacity = 16;
-        [SerializeField, Min(1)] private int _maxPoolSize = 128;
+        [Header("Pools")]
+        [SerializeField] private PoolDefinition _basicPool;
+        [SerializeField] private PoolDefinition _bbPool;
+        [SerializeField] private PoolDefinition _bbbPool;
 
         private PoolManager _poolManager;
-        private bool _poolsRegistered;
-
-        private string _basicPoolKey;
-        private string _bbPoolKey;
-        private string _bbbPoolKey;
 
         public RatBattlefield Battlefield
         {
@@ -34,10 +25,10 @@ namespace SiegeCore.Rat
             get
             {
                 return _battlefield != null
-                    && _basicPrefab != null
-                    && _bbPrefab != null
-                    && _bbbPrefab != null
-                    && EnsurePools();
+                    && _basicPool != null
+                    && _bbPool != null
+                    && _bbbPool != null
+                    && EnsurePoolManager();
             }
         }
 
@@ -48,22 +39,22 @@ namespace SiegeCore.Rat
             bool combat = false,
             bool falling = false)
         {
-            if (!EnsurePools())
+            if (!EnsurePoolManager())
             {
                 return null;
             }
 
-            string key =
-                GetPoolKey(form);
+            PoolDefinition definition =
+                GetPoolDefinition(form);
 
-            if (string.IsNullOrEmpty(key))
+            if (definition == null)
             {
                 return null;
             }
 
             GameObject instance =
                 _poolManager.Spawn(
-                    key,
+                    definition,
                     position,
                     Quaternion.identity);
 
@@ -152,16 +143,14 @@ namespace SiegeCore.Rat
             }
         }
 
-        private bool EnsurePools()
+        private bool EnsurePoolManager()
         {
-            if (_poolsRegistered)
-            {
-                return true;
-            }
-
-            if (_basicPrefab == null
-                || _bbPrefab == null
-                || _bbbPrefab == null)
+            if (_basicPool == null
+                || _bbPool == null
+                || _bbbPool == null
+                || _basicPool.Prefab == null
+                || _bbPool.Prefab == null
+                || _bbbPool.Prefab == null)
             {
                 return false;
             }
@@ -172,62 +161,23 @@ namespace SiegeCore.Rat
                     FindFirstObjectByType<PoolManager>();
             }
 
-            if (_poolManager == null
-                || !_poolManager.IsInitialized)
-            {
-                return false;
-            }
-
-            string prefix =
-                "RatFactory."
-                + GetInstanceID()
-                + ".";
-
-            _basicPoolKey = prefix + "Basic";
-            _bbPoolKey = prefix + "BB";
-            _bbbPoolKey = prefix + "BBB";
-
-            int defaultCapacity =
-                Mathf.Max(1, _defaultPoolCapacity);
-
-            int maxSize =
-                Mathf.Max(defaultCapacity, _maxPoolSize);
-
-            _poolManager.RegisterPool(
-                _basicPoolKey,
-                _basicPrefab.gameObject,
-                defaultCapacity,
-                maxSize);
-
-            _poolManager.RegisterPool(
-                _bbPoolKey,
-                _bbPrefab.gameObject,
-                defaultCapacity,
-                maxSize);
-
-            _poolManager.RegisterPool(
-                _bbbPoolKey,
-                _bbbPrefab.gameObject,
-                defaultCapacity,
-                maxSize);
-
-            _poolsRegistered = true;
-            return true;
+            return _poolManager != null
+                && _poolManager.IsInitialized;
         }
 
-        private string GetPoolKey(
+        private PoolDefinition GetPoolDefinition(
             RatForm form)
         {
             switch (form)
             {
                 case RatForm.Basic:
-                    return _basicPoolKey;
+                    return _basicPool;
 
                 case RatForm.BB:
-                    return _bbPoolKey;
+                    return _bbPool;
 
                 case RatForm.BBB:
-                    return _bbbPoolKey;
+                    return _bbbPool;
 
                 default:
                     return null;

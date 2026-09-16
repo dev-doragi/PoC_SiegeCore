@@ -241,12 +241,16 @@ public static class FrameworkSetup
         PoolManager pool = UnityEngine.Object.FindFirstObjectByType<PoolManager>();
         GameObject prefab = new GameObject("DifferentFromPoolKey");
         prefab.SetActive(false);
-        pool.RegisterPool("test-key", prefab);
-        GameObject instance = pool.Spawn("test-key", Vector3.one, Quaternion.identity);
+        PoolDefinition definition = ScriptableObject.CreateInstance<PoolDefinition>();
+        SerializedObject serializedDefinition = new SerializedObject(definition);
+        serializedDefinition.FindProperty("_prefab").objectReferenceValue = prefab;
+        serializedDefinition.ApplyModifiedPropertiesWithoutUndo();
+        GameObject instance = pool.Spawn(definition, Vector3.one, Quaternion.identity);
         instance.GetComponent<PooledObject>().Return();
         Check(!instance.activeSelf, "Pool ownership return");
-        Check(pool.Spawn("test-key", Vector3.zero, Quaternion.identity) == instance, "Pool reuse");
+        Check(pool.Spawn(definition, Vector3.zero, Quaternion.identity) == instance, "Pool reuse");
         pool.ClearAllPools();
+        UnityEngine.Object.Destroy(definition);
         UnityEngine.Object.Destroy(prefab);
     }
 

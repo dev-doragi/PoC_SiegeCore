@@ -2,18 +2,19 @@ using UnityEngine;
 public sealed class PooledObject : MonoBehaviour
 {
     public PoolManager Owner { get; private set; }
-    public string Key { get; private set; }
-    internal void Configure(PoolManager owner, string key)
+    public PoolDefinition Definition { get; private set; }
+
+    internal void Configure(PoolManager owner, PoolDefinition definition)
     {
         Owner = owner;
-        Key = key;
+        Definition = definition;
     }
 
     public void Return()
     {
         if (Owner != null)
         {
-            Owner.Despawn(Key, gameObject);
+            Owner.Despawn(Definition, gameObject);
         }
         else
         {
