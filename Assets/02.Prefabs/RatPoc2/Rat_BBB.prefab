@@ -16,7 +16,7 @@ GameObject:
   - component: {fileID: 8405149358511716293}
   - component: {fileID: 7787104973509532393}
   - component: {fileID: 6510489961267758272}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Rat_BBB
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -162,6 +162,7 @@ MonoBehaviour:
   _idleMoveSpeedRange: {x: 0.6, y: 1.6}
   _idleDelayRange: {x: 0.25, y: 1.2}
   _repathInterval: 0.3
+  _assignmentArrivalDistance: 0.35
 --- !u!114 &7787104973509532393
 MonoBehaviour:
   m_ObjectHideFlags: 0

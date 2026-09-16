@@ -35,6 +35,7 @@ namespace SiegeCore.Rat
         [Min(0.1f)] public float AttackInterval = 1f;
         [Min(0.1f)] public float MoveSpeed = 2f;
         [Min(0.1f)] public float AttackRange = 0.9f;
+        [Min(0.1f)] public float DetectionRadius = 4f;
 
         [Header("Cannon")]
         [Min(0f)] public float ProjectileDamage = 10f;

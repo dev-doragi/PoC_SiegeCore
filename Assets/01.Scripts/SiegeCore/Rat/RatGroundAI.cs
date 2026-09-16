@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using SiegeCore.Player;
+using CannonController = SiegeCore.Cannon.Cannon;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -9,6 +10,13 @@ namespace SiegeCore.Rat
     [RequireComponent(typeof(CarryableObject))]
     public sealed class RatGroundAI : MonoBehaviour
     {
+        public enum EnemyAssignment
+        {
+            None,
+            Ground,
+            Cannon
+        }
+
         [Header("Idle")]
         [SerializeField] private int _idleRadiusCells = 3;
         [SerializeField]
@@ -21,6 +29,8 @@ namespace SiegeCore.Rat
         [Header("Path")]
         [SerializeField, Min(0.05f)]
         private float _repathInterval = 0.3f;
+        [SerializeField, Min(0.05f)]
+        private float _assignmentArrivalDistance = 0.35f;
 
         private RatAgent _agent;
         private CarryableObject _carryable;
@@ -35,6 +45,12 @@ namespace SiegeCore.Rat
         private float _idleRestUntil;
         private float _nextPathTime;
         private float _nextAttackTime;
+        private bool _isInfiltrated;
+        private GroundGate _assignedGate;
+        private CannonController _assignedCannon;
+
+        public EnemyAssignment Assignment { get; private set; }
+        public bool IsInfiltrated { get { return _isInfiltrated; } }
 
         public bool IsMoving { get; private set; }
 
@@ -69,7 +85,14 @@ namespace SiegeCore.Rat
             switch (_agent.State)
             {
                 case RatState.Idle:
-                    UpdateIdle();
+                    if (Assignment == EnemyAssignment.None)
+                    {
+                        UpdateIdle();
+                    }
+                    else
+                    {
+                        UpdateAssignment();
+                    }
                     break;
 
                 case RatState.GroundCombat:
@@ -232,11 +255,28 @@ namespace SiegeCore.Rat
                 return;
             }
 
-            RatStructure structure = FindStructureTarget();
+            if (_isInfiltrated)
+            {
+                StopMovement();
+                return;
+            }
 
-            if (structure != null)
+            GroundGate enemyGate = _battlefield.GetEnemyGate(
+                _agent.Faction);
+
+            RatStructure structure = enemyGate != null
+                ? enemyGate.Entrance
+                : null;
+
+            if (structure != null && !structure.IsDestroyed)
             {
                 UpdateStructureTarget(structure);
+                return;
+            }
+
+            if (enemyGate != null)
+            {
+                UpdateDestroyedEntrance(enemyGate);
                 return;
             }
 
@@ -261,6 +301,14 @@ namespace SiegeCore.Rat
                 float distance =
                     ((Vector2)candidate.transform.position
                     - _carryable.PhysicsPosition).sqrMagnitude;
+
+                float detectionRadius =
+                    _agent.Definition.DetectionRadius;
+
+                if (distance > detectionRadius * detectionRadius)
+                {
+                    continue;
+                }
 
                 if (distance >= nearestDistance)
                 {
@@ -304,41 +352,6 @@ namespace SiegeCore.Rat
                 _agent.Definition.AttackDamage);
         }
 
-        private RatStructure FindStructureTarget()
-        {
-            RatStructure nearest = null;
-            float nearestDistance = float.PositiveInfinity;
-
-            foreach (RatStructure structure in RatStructure.Active)
-            {
-                if (structure == null
-                    || structure.IsDestroyed
-                    || structure.Faction == _agent.Faction)
-                {
-                    continue;
-                }
-
-                if (structure.IsEntrance)
-                {
-                    return structure;
-                }
-
-                float distance =
-                    (structure.transform.position
-                    - transform.position).sqrMagnitude;
-
-                if (distance >= nearestDistance)
-                {
-                    continue;
-                }
-
-                nearest = structure;
-                nearestDistance = distance;
-            }
-
-            return nearest;
-        }
-
         private void UpdateStructureTarget(
             RatStructure target)
         {
@@ -372,11 +385,156 @@ namespace SiegeCore.Rat
                 _agent.Definition.AttackDamage);
         }
 
+        private void UpdateDestroyedEntrance(GroundGate gate)
+        {
+            Vector3 target = gate.Entrance != null
+                ? gate.Entrance.transform.position
+                : gate.BasePosition;
+
+            if (Vector2.Distance(
+                    _carryable.PhysicsPosition,
+                    target) <= _agent.Definition.AttackRange)
+            {
+                StopMovement();
+                gate.TryEnterBase(_agent);
+                return;
+            }
+
+            MoveToward(target);
+        }
+
+        public void BeginArenaCombat()
+        {
+            Assignment = EnemyAssignment.None;
+            _assignedGate = null;
+            _assignedCannon = null;
+            _isInfiltrated = false;
+            ResetPath();
+        }
+
+        public void ResetForSpawn()
+        {
+            Assignment = EnemyAssignment.None;
+            _assignedGate = null;
+            _assignedCannon = null;
+            _isInfiltrated = false;
+            _battlefield = null;
+            ResetPath();
+        }
+
+        public void BeginBaseInfiltration()
+        {
+            Assignment = EnemyAssignment.None;
+            _assignedGate = null;
+            _assignedCannon = null;
+            _isInfiltrated = true;
+            ResetPath();
+        }
+
+        public bool AssignGround(GroundGate gate)
+        {
+            if (_agent.State != RatState.Idle || gate == null)
+            {
+                return false;
+            }
+
+            Assignment = EnemyAssignment.Ground;
+            _assignedGate = gate;
+            _assignedCannon = null;
+            ResetPath();
+            return true;
+        }
+
+        public bool AssignCannon(CannonController cannon)
+        {
+            if (_agent.State != RatState.Idle || cannon == null)
+            {
+                return false;
+            }
+
+            Assignment = EnemyAssignment.Cannon;
+            _assignedGate = null;
+            _assignedCannon = cannon;
+            ResetPath();
+            return true;
+        }
+
+        private void UpdateAssignment()
+        {
+            Vector3 target;
+
+            if (Assignment == EnemyAssignment.Ground)
+            {
+                if (_assignedGate == null)
+                {
+                    ClearAssignment();
+                    return;
+                }
+
+                target = _assignedGate.BasePosition;
+            }
+            else
+            {
+                if (_assignedCannon == null || _assignedCannon.IsFull)
+                {
+                    ClearAssignment();
+                    return;
+                }
+
+                target = _assignedCannon.GetLoadingPosition();
+            }
+
+            if (Vector2.Distance(
+                    _carryable.PhysicsPosition,
+                    target) <= _assignmentArrivalDistance)
+            {
+                StopMovement();
+
+                if (Assignment == EnemyAssignment.Ground)
+                {
+                    _assignedGate.TryEnterArena(_agent);
+                }
+                else if (!_agent.TryLoadIntoCannon(_assignedCannon))
+                {
+                    ClearAssignment();
+                }
+
+                return;
+            }
+
+            MoveToward(target, _assignmentArrivalDistance);
+        }
+
+        private void ClearAssignment()
+        {
+            Assignment = EnemyAssignment.None;
+            _assignedGate = null;
+            _assignedCannon = null;
+            ResetPath();
+            BeginIdleRest();
+        }
+
+        private void ResetPath()
+        {
+            _path.Clear();
+            _waypointIndex = 0;
+            _nextPathTime = 0f;
+        }
+
         // ------------------------------------------------------------
         // Movement
         // ------------------------------------------------------------
 
         private void MoveToward(Vector3 target)
+        {
+            MoveToward(
+                target,
+                _agent.Definition.AttackRange);
+        }
+
+        private void MoveToward(
+            Vector3 target,
+            float stopRange)
         {
             if (Time.time >= _nextPathTime)
             {
@@ -390,7 +548,7 @@ namespace SiegeCore.Rat
                     target,
                     _agent.Faction,
                     _path,
-                    _agent.Definition.AttackRange);
+                    stopRange);
 
                 _waypointIndex = 0;
             }

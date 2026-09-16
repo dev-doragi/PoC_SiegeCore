@@ -16,7 +16,7 @@ GameObject:
   - component: {fileID: 4147443369820938040}
   - component: {fileID: 1160542731963242287}
   - component: {fileID: 5608625152607295448}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Rat_BB
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -101,7 +101,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 0.25
+  m_Radius: 0.75
 --- !u!114 &3934090492801247039
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -175,6 +175,7 @@ MonoBehaviour:
   _idleMoveSpeedRange: {x: 0.6, y: 1.6}
   _idleDelayRange: {x: 0.25, y: 1.2}
   _repathInterval: 0.3
+  _assignmentArrivalDistance: 0.35
 --- !u!114 &5608625152607295448
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -229,8 +230,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.35625, y: 0.35625, z: 0.35625}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 7952674093174395391}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

@@ -15,6 +15,7 @@ namespace SiegeCore.Rat
         public VehicleSide Faction { get { return _faction; } }
         public bool IsEntrance { get { return _isEntrance; } }
         public float Health { get; private set; }
+        public float MaxHealth { get { return _maxHealth; } }
         public bool IsDestroyed { get { return Health <= 0f; } }
 
         private void OnEnable()

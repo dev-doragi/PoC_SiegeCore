@@ -11,7 +11,11 @@ namespace SiegeCore.Rat
         [SerializeField] private BoxCollider2D _safeZone;
         [SerializeField] private Transform _allyExit;
         [SerializeField] private Transform _enemyExit;
+        [SerializeField] private GroundGate _allyGate;
+        [SerializeField] private GroundGate _enemyGate;
         public Tilemap Ground { get { return _ground; } }
+        public GroundGate AllyGate { get { return _allyGate; } }
+        public GroundGate EnemyGate { get { return _enemyGate; } }
         private static readonly Vector3Int[] Directions = { Vector3Int.left, Vector3Int.right, Vector3Int.up, Vector3Int.down };
 
         public bool IsSafe(Vector3 position)
@@ -112,6 +116,66 @@ namespace SiegeCore.Rat
                 }
             }
             return best;
+        }
+
+        public Vector3 FloorBelow(
+            Vector3 position,
+            VehicleSide faction)
+        {
+            Vector3 best = Vector3.zero;
+            float bestHorizontalDistance = float.PositiveInfinity;
+            float bestVerticalDistance = float.PositiveInfinity;
+            bool found = false;
+
+            foreach (Vector3Int cell in _ground.cellBounds.allPositionsWithin)
+            {
+                if (!IsWalkable(cell, faction))
+                {
+                    continue;
+                }
+
+                Vector3 candidate = _ground.GetCellCenterWorld(cell);
+                if (candidate.y > position.y)
+                {
+                    continue;
+                }
+
+                float horizontalDistance =
+                    Mathf.Abs(candidate.x - position.x);
+                float verticalDistance = position.y - candidate.y;
+
+                if (horizontalDistance > bestHorizontalDistance
+                    || (Mathf.Approximately(
+                            horizontalDistance,
+                            bestHorizontalDistance)
+                        && verticalDistance >= bestVerticalDistance))
+                {
+                    continue;
+                }
+
+                best = candidate;
+                bestHorizontalDistance = horizontalDistance;
+                bestVerticalDistance = verticalDistance;
+                found = true;
+            }
+
+            return found
+                ? best
+                : NearestFloor(position, faction);
+        }
+
+        public GroundGate GetOwnGate(VehicleSide faction)
+        {
+            return faction == VehicleSide.Ally
+                ? _allyGate
+                : _enemyGate;
+        }
+
+        public GroundGate GetEnemyGate(VehicleSide faction)
+        {
+            return faction == VehicleSide.Ally
+                ? _enemyGate
+                : _allyGate;
         }
     }
 }

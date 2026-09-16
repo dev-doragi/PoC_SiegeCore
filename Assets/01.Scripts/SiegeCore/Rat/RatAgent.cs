@@ -159,6 +159,12 @@ namespace SiegeCore.Rat
             _groundReturnState = groundState;
             _landingState = groundState;
 
+            RatGroundAI groundAI = GetComponent<RatGroundAI>();
+            if (groundAI != null)
+            {
+                groundAI.ResetForSpawn();
+            }
+
             _suppressCarryEvent = true;
             _carryable.ResetForRat(factory.Battlefield.Ground);
             _suppressCarryEvent = false;
@@ -476,6 +482,52 @@ namespace SiegeCore.Rat
             Vector3 position)
         {
             EnterGroundCombat(factory, position);
+        }
+
+        public void TeleportAirborne(Vector3 position)
+        {
+            if (_state != RatState.Airborne)
+            {
+                return;
+            }
+
+            transform.position = position;
+
+            Rigidbody2D body = GetComponent<Rigidbody2D>();
+            if (body != null)
+            {
+                body.position = position;
+                body.linearVelocity = Vector2.zero;
+            }
+        }
+
+        public bool TryLoadIntoCannon(SiegeCore.Cannon.Cannon cannon)
+        {
+            if (_state != RatState.Idle
+                || cannon == null
+                || _factory == null)
+            {
+                return false;
+            }
+
+            BeginAirborne(RatState.Idle, 0f);
+
+            _suppressCarryEvent = true;
+            _carryable.BeginRatFall(
+                _factory.Battlefield.Ground,
+                0.1f);
+            _suppressCarryEvent = false;
+
+            if (cannon.TryLoad(_carryable))
+            {
+                EnterLoaded();
+                return true;
+            }
+
+            _carryable.ResetForRat(
+                _factory.Battlefield.Ground);
+            ChangeState(RatState.Idle);
+            return false;
         }
 
         // --------------------------------------------------------------------

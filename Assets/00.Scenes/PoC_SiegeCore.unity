@@ -374,6 +374,8 @@ GameObject:
   m_Component:
   - component: {fileID: 209792777}
   - component: {fileID: 209792776}
+  - component: {fileID: 209792778}
+  - component: {fileID: 209792779}
   m_Layer: 0
   m_Name: AllyExit
   m_TagString: Untagged
@@ -455,6 +457,69 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: -180}
+--- !u!61 &209792778
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 209792775}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 1, y: 1}
+    newSize: {x: 1, y: 2}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 1.5, y: 1.5}
+  m_EdgeRadius: 0
+--- !u!114 &209792779
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 209792775}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3390a6c2bd8d3749ac0c351c7ec95e3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.GroundGate
+  _faction: 0
+  _factory: {fileID: 501205960}
+  _exitPoint: {fileID: 1938834534}
+  _entrance: {fileID: 1938834536}
+  _spawnSpread: 0.75
 --- !u!1 &220080652
 GameObject:
   m_ObjectHideFlags: 0
@@ -465,6 +530,8 @@ GameObject:
   m_Component:
   - component: {fileID: 220080654}
   - component: {fileID: 220080653}
+  - component: {fileID: 220080655}
+  - component: {fileID: 220080656}
   m_Layer: 0
   m_Name: EnemyExit
   m_TagString: Untagged
@@ -546,6 +613,69 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: -180}
+--- !u!61 &220080655
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220080652}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 1, y: 1}
+    newSize: {x: 1, y: 2}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 1.5, y: 1.5}
+  m_EdgeRadius: 0
+--- !u!114 &220080656
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220080652}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3390a6c2bd8d3749ac0c351c7ec95e3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.GroundGate
+  _faction: 1
+  _factory: {fileID: 501205960}
+  _exitPoint: {fileID: 1216653008}
+  _entrance: {fileID: 1216653010}
+  _spawnSpread: 0.75
 --- !u!1 &253101584
 GameObject:
   m_ObjectHideFlags: 0
@@ -867,6 +997,7 @@ GameObject:
   - component: {fileID: 501205959}
   - component: {fileID: 501205956}
   - component: {fileID: 501205955}
+  - component: {fileID: 501205960}
   m_Layer: 0
   m_Name: RatSystem
   m_TagString: Untagged
@@ -886,15 +1017,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5ae17002a5aac2542950902fcee7c1e9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatEncounter
-  _factory: {fileID: 1777149723}
-  _enemyExit: {fileID: 220080654}
-  _enemyCannons:
-  - {fileID: 511978070}
   _status: {fileID: 0}
-  _enemyUnitInterval: 10
-  _enemyShotInterval: 10
-  _enemyUnits: 01000000020000000100000003000000
-  _enemyShots: 010000000100000003000000
 --- !u!114 &501205956
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -911,6 +1034,8 @@ MonoBehaviour:
   _safeZone: {fileID: 612836784}
   _allyExit: {fileID: 209792777}
   _enemyExit: {fileID: 220080654}
+  _allyGate: {fileID: 209792779}
+  _enemyGate: {fileID: 220080656}
 --- !u!4 &501205959
 Transform:
   m_ObjectHideFlags: 0
@@ -926,6 +1051,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: -90}
+--- !u!114 &501205960
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 501205954}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d49139186046c4448bcc48474db6ff89, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatFactory
+  _battlefield: {fileID: 501205956}
+  _basicPool: {fileID: 11400000, guid: 0e0731ba57f04afea61ef001c8e6f180, type: 2}
+  _bbPool: {fileID: 11400000, guid: 76f62d533ebb42c28e2c6de71e311f21, type: 2}
+  _bbbPool: {fileID: 11400000, guid: 3c39686fa2184d548a07f1e11198d160, type: 2}
 --- !u!114 &511978070 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 620828230242061152, guid: 22d0bdd99493d664ebaf6cd6c17bef80, type: 3}
@@ -1613,10 +1754,17 @@ PrefabInstance:
       propertyPath: m_Name
       value: Player
       objectReference: {fileID: 0}
+    - target: {fileID: 7067695489636434350, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 7067695489636434350, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1988919425}
   m_SourcePrefab: {fileID: 100100000, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
 --- !u!1 &1143547436
 GameObject:
@@ -1756,6 +1904,116 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1939311823}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1158331590
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1158331593}
+  - component: {fileID: 1158331592}
+  - component: {fileID: 1158331591}
+  m_Layer: 0
+  m_Name: EnemyRatDispenser
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!212 &1158331591
+SpriteRenderer:
+  serializedVersion: 2
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1158331590}
+  m_Enabled: 1
+  m_CastShadows: 0
+  m_ReceiveShadows: 0
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 0
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 0
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 1888895783
+  m_SortingLayer: 2
+  m_SortingOrder: 0
+  m_MaskInteraction: 0
+  m_Sprite: {fileID: 21300000, guid: 053dc8250dd718d43bd66e882cc56bbc, type: 3}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_FlipX: 0
+  m_FlipY: 0
+  m_DrawMode: 0
+  m_Size: {x: 1, y: 2}
+  m_AdaptiveModeThreshold: 0.5
+  m_SpriteTileMode: 0
+  m_WasSpriteAssigned: 1
+  m_SpriteSortPoint: 0
+--- !u!114 &1158331592
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1158331590}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d319a3c159e64f2f94e9728941ed39af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatDispenser
+  _factory: {fileID: 501205960}
+  _faction: 1
+  _outlet: {fileID: 1158331593}
+  _spawnInterval: 3
+  _ejectDirection: {x: -2, y: 0}
+  _ejectSpeed: 2
+--- !u!4 &1158331593
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1158331590}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0.7071068, w: 0.7071068}
+  m_LocalPosition: {x: 55.44, y: 2.55, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 90}
 --- !u!1 &1164406763
 GameObject:
   m_ObjectHideFlags: 0
@@ -1998,7 +2256,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
@@ -2030,7 +2288,7 @@ MonoBehaviour:
   _isEntrance: 1
   _maxHealth: 30
   _barrier: {fileID: 1216653009}
-  _visual: {fileID: 0}
+  _visual: {fileID: 931713144}
 --- !u!1 &1349779407
 GameObject:
   m_ObjectHideFlags: 0
@@ -8813,6 +9071,11 @@ Tilemap:
     e31: 0
     e32: 0
     e33: 1
+--- !u!1 &1654052848 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7067695489636434350, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
+  m_PrefabInstance: {fileID: 1132429237}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1706503664
 GameObject:
   m_ObjectHideFlags: 0
@@ -9000,11 +9263,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1777149721}
-  - component: {fileID: 1777149723}
   - component: {fileID: 1777149724}
   - component: {fileID: 1777149722}
   m_Layer: 0
-  m_Name: RatFactory
+  m_Name: AllyRatDispenser
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -9084,22 +9346,6 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
---- !u!114 &1777149723
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1777149720}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d49139186046c4448bcc48474db6ff89, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatFactory
-  _battlefield: {fileID: 501205956}
-  _basicPool: {fileID: 11400000, guid: 0e0731ba57f04afea61ef001c8e6f180, type: 2}
-  _bbPool: {fileID: 11400000, guid: 76f62d533ebb42c28e2c6de71e311f21, type: 2}
-  _bbbPool: {fileID: 11400000, guid: 3c39686fa2184d548a07f1e11198d160, type: 2}
 --- !u!114 &1777149724
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9112,11 +9358,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d319a3c159e64f2f94e9728941ed39af, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatDispenser
-  _factory: {fileID: 1777149723}
+  _factory: {fileID: 501205960}
   _faction: 0
   _outlet: {fileID: 1777149721}
-  _spawnInterval: 5
-  _ejectDirection: {x: 1, y: 0}
+  _spawnInterval: 3
+  _ejectDirection: {x: 2, y: 0}
   _ejectSpeed: 2
 --- !u!1 &1807365966
 GameObject:
@@ -9453,7 +9699,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
@@ -9485,7 +9731,7 @@ MonoBehaviour:
   _isEntrance: 1
   _maxHealth: 30
   _barrier: {fileID: 1938834535}
-  _visual: {fileID: 0}
+  _visual: {fileID: 353990629}
 --- !u!1 &1939311821
 GameObject:
   m_ObjectHideFlags: 0
@@ -9496,6 +9742,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1939311823}
   - component: {fileID: 1939311822}
+  - component: {fileID: 1939311824}
   m_Layer: 0
   m_Name: SceneContext
   m_TagString: Untagged
@@ -9534,6 +9781,35 @@ Transform:
   - {fileID: 1144848506}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1939311824
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1939311821}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9b6bda8be2045e9a0c2df8651c0db9a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.EnemyRatDirector
+  _battlefield: {fileID: 501205956}
+  _enemyExit: {fileID: 220080656}
+  _enemyCannons:
+  - {fileID: 511978070}
+  _balanced:
+    Ground: 50
+    Cannon: 50
+  _push:
+    Ground: 75
+    Cannon: 25
+  _bombard:
+    Ground: 25
+    Cannon: 75
+  _decisionInterval: 5
+  _minimumStrategyDuration: 12
+  _assignmentInterval: 0.75
+  _scoreRandomness: 0.15
 --- !u!1 &1968009150
 GameObject:
   m_ObjectHideFlags: 0
@@ -9572,6 +9848,20 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 5815787538757299612, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
   m_PrefabInstance: {fileID: 1132429237}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1988919425
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1654052848}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed3757fab16d75c4ea6fef5fe3942616, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatStacking
+  _factory: {fileID: 501205960}
+  _stageDuration: 0.6
 --- !u!1 &2059067865
 GameObject:
   m_ObjectHideFlags: 0
@@ -9818,6 +10108,11 @@ SceneRoots:
   - {fileID: 1939311823}
   - {fileID: 501205959}
   - {fileID: 1777149721}
+  - {fileID: 1158331593}
+  - {fileID: 1807365968}
+  - {fileID: 209792777}
+  - {fileID: 220080654}
+  - {fileID: 1143547438}
   - {fileID: 1968009151}
   - {fileID: 844662686}
   - {fileID: 187190615}
@@ -9825,7 +10120,3 @@ SceneRoots:
   - {fileID: 686633985}
   - {fileID: 754598898614204487}
   - {fileID: 886957708}
-  - {fileID: 1807365968}
-  - {fileID: 209792777}
-  - {fileID: 220080654}
-  - {fileID: 1143547438}

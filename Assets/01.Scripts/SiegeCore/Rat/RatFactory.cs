@@ -134,12 +134,28 @@ namespace SiegeCore.Rat
                         offset.y,
                         0f);
 
-                Spawn(
+                Vector3 landingPosition =
+                    _battlefield.FloorBelow(
+                        spawnPosition,
+                        faction);
+
+                RatAgent rat = Spawn(
                     RatForm.Basic,
                     faction,
-                    spawnPosition,
+                    landingPosition,
                     true,
                     true);
+
+                if (rat != null)
+                {
+                    float fallHeight = Mathf.Max(
+                        0.1f,
+                        spawnPosition.y - landingPosition.y);
+
+                    rat.Carryable.BeginRatFall(
+                        _battlefield.Ground,
+                        fallHeight);
+                }
             }
         }
 
