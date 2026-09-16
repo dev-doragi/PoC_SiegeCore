@@ -13,6 +13,9 @@ GameObject:
   - component: {fileID: 3342614870958549493}
   - component: {fileID: 2989915881095887205}
   - component: {fileID: 2668117264886249552}
+  - component: {fileID: 1188066156338834890}
+  - component: {fileID: 2723632910628179223}
+  - component: {fileID: 3922576104541050906}
   m_Layer: 0
   m_Name: Rat_Basic
   m_TagString: Untagged
@@ -114,9 +117,11 @@ MonoBehaviour:
   _groundTilemap: {fileID: 0}
   _snapSteering: 12
   _snapFinishDuration: 0.12
-  _occupiedCellBounceHeight: 0.3
   _visual: {fileID: 5806945637712280368}
-  _shadow: {fileID: 1141590451083670420}
+  _shadowScale: {x: 1, y: 0.3}
+  _shadowAlpha: 0.35
+  _shadowAirScale: 0.6
+  _shadowOffset: {x: 0, y: -0.8}
   _throwSpeed: 5.5
   _upwardSpeed: 4
   _heightGravity: 16
@@ -124,8 +129,8 @@ MonoBehaviour:
   _groundSpeedRetention: 0.65
   _minimumBounceSpeed: 0.8
   _wallRestitution: 0.5
-  _cannonFlightDuration: 3
-  _cannonArcHeight: 2
+  _defaultCannonFlightDuration: 3
+  _defaultCannonArcHeight: 2
 --- !u!114 &2668117264886249552
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -139,10 +144,64 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatAgent
   _definition: {fileID: 11400000, guid: f0d3b88c040fa3f4fa731a7bfbf489a1, type: 2}
+  _allyGroggyDuration: 0.2
+  _enemyGroggyDuration: 3
+--- !u!114 &1188066156338834890
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8591575405359856006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5a00ca4efab9eaf479c2b7fb61cb5917, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatGroundAI
+  _idleRadiusCells: 3
+  _idleMoveSpeedRange: {x: 0.6, y: 1.6}
+  _idleDelayRange: {x: 0.25, y: 1.2}
+  _repathInterval: 0.3
+--- !u!114 &2723632910628179223
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8591575405359856006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7a0d616ed1b55c3469d2d4a6c648bee5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatPresentation
   _renderer: {fileID: 1141590451083670420}
   _groundSprite: {fileID: 21300000, guid: 084044ac3dfcb804aaf7e7ef8bbe42d0, type: 3}
   _projectileSprite: {fileID: 21300000, guid: d6470002e63e1504ab0b4874a9cfd0ee, type: 3}
-  _groggyDuration: 3
+  _deadSprite: {fileID: 21300000, guid: 7f1237e1324f2f347a231683c63d3404, type: 3}
+  _allyColor: {r: 1, g: 1, b: 1, a: 1}
+  _enemyColor: {r: 1, g: 0.55, b: 0.55, a: 1}
+  _wiggleAmount: 0.09
+  _wiggleSpeed: 20
+  _bounceAmount: 0.08
+  _bounceSpeed: 16
+  _stretchAmount: 0.08
+  _idleBreathAmount: 0.025
+  _idleBreathSpeed: 3.2
+  _deathSinkDistance: 0.3
+  _deathDuration: 0.6
+--- !u!114 &3922576104541050906
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8591575405359856006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3f17a998c9d840f9a91f08167a2f9642, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Projectile.Projectile
+  _cancellationHeightDifference: 0.5
 --- !u!1 &8899446616154975823
 GameObject:
   m_ObjectHideFlags: 0

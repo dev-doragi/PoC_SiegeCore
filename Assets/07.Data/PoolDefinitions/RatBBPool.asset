@@ -12,6 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7ab860ded17a43e0ae1ca23313dac57e, type: 3}
   m_Name: RatBBPool
   m_EditorClassIdentifier: Assembly-CSharp::PoolDefinition
-  _prefab: {fileID: 8259745048396159277, guid: 26a27af7a3d344e40940e1f64f8df6c9, type: 3}
+  _prefab: {fileID: 6986804440049888011, guid: 26a27af7a3d344e40940e1f64f8df6c9, type: 3}
   _defaultCapacity: 16
   _maxSize: 128

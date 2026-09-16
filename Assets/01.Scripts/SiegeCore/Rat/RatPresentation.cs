@@ -120,6 +120,21 @@ namespace SiegeCore.Rat
 
         private void Refresh(RatState state)
         {
+            if (state != RatState.Dead
+                && _deathTween != null)
+            {
+                _deathTween.Kill();
+                _deathTween = null;
+            }
+
+            if (state != RatState.Dead)
+            {
+                Color color = _renderer.color;
+                color.a = 1f;
+                _renderer.color = color;
+                _renderer.transform.localPosition = _basePosition;
+            }
+
             ApplyFactionColor();
 
             switch (state)
@@ -142,6 +157,7 @@ namespace SiegeCore.Rat
                     return;
             }
 
+            _agent.Carryable.RefreshShadowSprite();
             ResetMotionVisual();
         }
 
@@ -234,6 +250,7 @@ namespace SiegeCore.Rat
             }
 
             _renderer.sprite = _deadSprite;
+            _agent.Carryable.RefreshShadowSprite();
 
             Sequence sequence = DOTween.Sequence();
 

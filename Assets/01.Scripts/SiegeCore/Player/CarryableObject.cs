@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DG.Tweening;
 using SiegeCore.Cannon;
 using SiegeCore.Rat;
@@ -17,7 +18,12 @@ namespace SiegeCore.Player
 
         [Header("Presentation")]
         [SerializeField] private Transform _visual;
-        [SerializeField] private SpriteRenderer _shadow;
+
+        [Header("Shadow")]
+        [SerializeField] private Vector2 _shadowScale = new Vector2(1f, 0.45f);
+        [SerializeField, Range(0f, 1f)] private float _shadowAlpha = 0.35f;
+        [SerializeField, Range(0.1f, 1f)] private float _shadowAirScale = 0.6f;
+        [SerializeField] private Vector2 _shadowOffset = new Vector2(0f, -0.05f);
 
         [Header("Throw")]
         [SerializeField, Min(0f)] private float _throwSpeed = 5.5f;
@@ -39,7 +45,9 @@ namespace SiegeCore.Player
         private Transform _worldParent;
 
         private Vector3 _visualRestPosition;
-        private Vector3 _shadowRestScale;
+        private SpriteRenderer _visualRenderer;
+        private SpriteRenderer _shadowRenderer;
+        private Transform _shadowTransform;
 
         private PhysicsMaterial2D _flightMaterial;
         private PhysicsMaterial2D _originalMaterial;
@@ -53,6 +61,18 @@ namespace SiegeCore.Player
         private bool _hasSnapTarget;
         private bool _isSnapping;
         private Tween _snapTween;
+
+        private static readonly HashSet<CarryableObject> ActiveItems =
+            new HashSet<CarryableObject>();
+
+        private readonly HashSet<Vector3Int> _occupiedCells =
+            new HashSet<Vector3Int>();
+
+        private readonly Queue<Vector3Int> _searchQueue =
+            new Queue<Vector3Int>();
+
+        private readonly HashSet<Vector3Int> _visitedCells =
+            new HashSet<Vector3Int>();
 
         private float _cannonFlightTime;
         private float _cannonFlightDuration;
@@ -74,6 +94,16 @@ namespace SiegeCore.Player
         public float Height
         {
             get { return _height; }
+        }
+
+        public Vector2 PhysicsPosition
+        {
+            get
+            {
+                return _rigidbody != null
+                    ? _rigidbody.position
+                    : (Vector2)transform.position;
+            }
         }
 
         public Transform CarryTransform
@@ -145,13 +175,44 @@ namespace SiegeCore.Player
             }
 
             _visualRestPosition = _visual.localPosition;
-
-            if (_shadow != null)
-            {
-                _shadowRestScale = _shadow.transform.localScale;
-            }
+            CreateShadow();
 
             CompleteSettle(false);
+        }
+
+        private void CreateShadow()
+        {
+            _visualRenderer = _visual.GetComponent<SpriteRenderer>();
+
+            if (_visualRenderer == null)
+            {
+                Debug.LogError(
+                    "[CarryableObject] Visual requires SpriteRenderer.",
+                    this);
+                return;
+            }
+
+            GameObject shadowObject = new GameObject("Shadow");
+
+            _shadowTransform = shadowObject.transform;
+            _shadowTransform.SetParent(transform, false);
+            _shadowTransform.localPosition = new Vector3(
+                _shadowOffset.x,
+                _shadowOffset.y,
+                0f);
+            _shadowTransform.localScale = new Vector3(
+                _shadowScale.x,
+                _shadowScale.y,
+                1f);
+
+            _shadowRenderer = shadowObject.AddComponent<SpriteRenderer>();
+            _shadowRenderer.sprite = _visualRenderer.sprite;
+            _shadowRenderer.sortingLayerID = _visualRenderer.sortingLayerID;
+            _shadowRenderer.sortingOrder = _visualRenderer.sortingOrder - 1;
+
+            Color shadowColor = Color.black;
+            shadowColor.a = _shadowAlpha;
+            _shadowRenderer.color = shadowColor;
         }
 
         private void FixedUpdate()
@@ -261,6 +322,9 @@ namespace SiegeCore.Player
                 return false;
             }
 
+            CancelSnap();
+            RestoreThrowerCollisions();
+
             float initialHeight =
                 Mathf.Max(0f, transform.position.y - groundPosition.y);
 
@@ -268,19 +332,56 @@ namespace SiegeCore.Player
             transform.position = groundPosition;
             _rigidbody.position = groundPosition;
 
-            BeginThrow(
-                direction.normalized,
-                initialHeight,
-                _upwardSpeed,
-                throwerColliders);
+            IsCarried = false;
+            IsLoaded = false;
+            IsCannonFlight = false;
+            IsAirborne = true;
 
+            _height = initialHeight;
+            _verticalSpeed = _upwardSpeed;
+
+            _rigidbody.bodyType = RigidbodyType2D.Dynamic;
+            _rigidbody.linearDamping = 0f;
+            _rigidbody.angularVelocity = 0f;
+            _rigidbody.simulated = true;
+
+            _collider.isTrigger = false;
+            _flightMaterial.bounciness = _wallRestitution;
+            _collider.sharedMaterial = _flightMaterial;
+
+            IgnoreThrowerCollisions(throwerColliders);
+
+            // Rat 상태 전환 중 Ground AI가 기존 지상 이동 속도를 정리한 뒤
+            // 실제 Throw impulse를 마지막에 적용합니다.
+            NotifyStateChanged();
+
+            _rigidbody.linearVelocity =
+                direction.normalized * _throwSpeed;
+
+            return true;
+        }
+
+        public bool TryMoveOnGround(Vector2 position)
+        {
+            if (!isActiveAndEnabled
+                || _rigidbody == null
+                || IsCarried
+                || IsAirborne
+                || IsLoaded
+                || IsCannonFlight
+                || _isSnapping)
+            {
+                return false;
+            }
+
+            _rigidbody.MovePosition(position);
             return true;
         }
 
         public bool TryDispense(
             Tilemap groundTilemap,
             Vector2 direction,
-            float upwardSpeed)
+            float speed)
         {
             if (!isActiveAndEnabled
                 || IsCarried
@@ -291,13 +392,32 @@ namespace SiegeCore.Player
                 return false;
             }
 
+            CancelSnap();
+            RestoreThrowerCollisions();
+
             _groundTilemap = groundTilemap;
 
-            BeginThrow(
-                direction.normalized,
-                0f,
-                upwardSpeed,
-                null);
+            IsCarried = false;
+            IsLoaded = false;
+            IsCannonFlight = false;
+            IsAirborne = true;
+
+            _height = 0f;
+            _verticalSpeed = _upwardSpeed;
+
+            _rigidbody.bodyType = RigidbodyType2D.Dynamic;
+            _rigidbody.linearDamping = 0f;
+            _rigidbody.angularVelocity = 0f;
+            _rigidbody.simulated = true;
+
+            _collider.isTrigger = false;
+            _flightMaterial.bounciness = _wallRestitution;
+            _collider.sharedMaterial = _flightMaterial;
+
+            NotifyStateChanged();
+
+            _rigidbody.linearVelocity =
+                direction.normalized * Mathf.Max(0f, speed);
 
             return true;
         }
@@ -322,38 +442,8 @@ namespace SiegeCore.Player
             _rigidbody.simulated = true;
             _rigidbody.linearVelocity = Vector2.zero;
 
-            _collider.isTrigger = false;
+            _collider.isTrigger = true;
             _collider.sharedMaterial = _flightMaterial;
-
-            NotifyStateChanged();
-        }
-
-        private void BeginThrow(
-            Vector2 direction,
-            float initialHeight,
-            float upwardSpeed,
-            Collider2D[] ignoredColliders)
-        {
-            CancelSnap();
-
-            IsCarried = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
-            IsAirborne = true;
-
-            _height = initialHeight;
-            _verticalSpeed = Mathf.Max(0f, upwardSpeed);
-
-            _rigidbody.bodyType = RigidbodyType2D.Dynamic;
-            _rigidbody.linearDamping = 0f;
-            _rigidbody.simulated = true;
-            _rigidbody.linearVelocity =
-                direction * _throwSpeed;
-
-            _collider.isTrigger = false;
-            _collider.sharedMaterial = _flightMaterial;
-
-            IgnoreThrowerCollisions(ignoredColliders);
 
             NotifyStateChanged();
         }
@@ -437,6 +527,8 @@ namespace SiegeCore.Player
                 return;
             }
 
+            CollectOccupiedCells();
+
             Vector2 expectedPosition =
                 _rigidbody.position
                 + _rigidbody.linearVelocity
@@ -450,14 +542,110 @@ namespace SiegeCore.Player
             Vector3Int cell =
                 _groundTilemap.WorldToCell(worldPosition);
 
-            if (!_groundTilemap.HasTile(cell))
+            if (!IsAvailableCell(cell)
+                && !TryFindNearestEmptyCell(cell, out cell))
             {
                 return;
             }
 
-            _snapTarget =
-                _groundTilemap.GetCellCenterWorld(cell);
+            SetSnapTarget(cell);
+        }
 
+        private void CollectOccupiedCells()
+        {
+            _occupiedCells.Clear();
+
+            foreach (CarryableObject other in ActiveItems)
+            {
+                if (other == null
+                    || other == this
+                    || !other.isActiveAndEnabled
+                    || other._groundTilemap != _groundTilemap)
+                {
+                    continue;
+                }
+
+                if (other.IsCarried
+                    || other.IsLoaded
+                    || other.IsCannonFlight)
+                {
+                    continue;
+                }
+
+                if (!other.IsAirborne)
+                {
+                    _occupiedCells.Add(
+                        _groundTilemap.WorldToCell(other.transform.position));
+                }
+
+                if (other._hasSnapTarget)
+                {
+                    _occupiedCells.Add(
+                        _groundTilemap.WorldToCell(other._snapTarget));
+                }
+            }
+        }
+
+        private bool TryFindNearestEmptyCell(
+            Vector3Int start,
+            out Vector3Int result)
+        {
+            _searchQueue.Clear();
+            _visitedCells.Clear();
+
+            _searchQueue.Enqueue(start);
+            _visitedCells.Add(start);
+
+            Vector3Int[] directions =
+            {
+                Vector3Int.right,
+                Vector3Int.left,
+                Vector3Int.up,
+                Vector3Int.down,
+                new Vector3Int(1, 1, 0),
+                new Vector3Int(1, -1, 0),
+                new Vector3Int(-1, 1, 0),
+                new Vector3Int(-1, -1, 0)
+            };
+
+            while (_searchQueue.Count > 0)
+            {
+                Vector3Int current = _searchQueue.Dequeue();
+
+                if (IsAvailableCell(current))
+                {
+                    result = current;
+                    return true;
+                }
+
+                for (int index = 0; index < directions.Length; index++)
+                {
+                    Vector3Int next = current + directions[index];
+
+                    if (_visitedCells.Contains(next)
+                        || !_groundTilemap.HasTile(next))
+                    {
+                        continue;
+                    }
+
+                    _visitedCells.Add(next);
+                    _searchQueue.Enqueue(next);
+                }
+            }
+
+            result = default;
+            return false;
+        }
+
+        private bool IsAvailableCell(Vector3Int cell)
+        {
+            return _groundTilemap.HasTile(cell)
+                && !_occupiedCells.Contains(cell);
+        }
+
+        private void SetSnapTarget(Vector3Int cell)
+        {
+            _snapTarget = _groundTilemap.GetCellCenterWorld(cell);
             _hasSnapTarget = true;
         }
 
@@ -653,6 +841,7 @@ namespace SiegeCore.Player
 
             CancelSnap();
             RestoreThrowerCollisions();
+            GroundSortingRequested?.Invoke(this);
 
             IsCarried = false;
             IsAirborne = false;
@@ -783,28 +972,43 @@ namespace SiegeCore.Player
                 return;
             }
 
-            if (IsAirborne)
-            {
-                _visual.position =
-                    transform.TransformPoint(
-                        _visualRestPosition)
-                    + Vector3.up * _height;
-            }
+            _visual.localPosition =
+                _visualRestPosition
+                + Vector3.up * _height;
 
-            if (_shadow == null)
+            if (_shadowTransform == null
+                || _shadowRenderer == null)
             {
                 return;
             }
 
-            _shadow.enabled =
-                !IsCarried && !IsLoaded;
+            _shadowTransform.localPosition = new Vector3(
+                _shadowOffset.x,
+                _shadowOffset.y,
+                0f);
 
-            _shadow.transform.localScale =
-                _shadowRestScale
-                * Mathf.Lerp(
-                    1f,
-                    0.6f,
-                    Mathf.Clamp01(_height / 2f));
+            float heightRatio = Mathf.Clamp01(_height / 2f);
+            float scaleMultiplier = Mathf.Lerp(
+                1f,
+                _shadowAirScale,
+                heightRatio);
+
+            _shadowTransform.localScale = new Vector3(
+                _shadowScale.x * scaleMultiplier,
+                _shadowScale.y * scaleMultiplier,
+                1f);
+
+            _shadowRenderer.enabled =
+                !IsCarried && !IsLoaded;
+        }
+
+        public void RefreshShadowSprite()
+        {
+            if (_visualRenderer != null
+                && _shadowRenderer != null)
+            {
+                _shadowRenderer.sprite = _visualRenderer.sprite;
+            }
         }
 
         private void ResetVisualHeight()
@@ -903,8 +1107,15 @@ namespace SiegeCore.Player
 
         private void OnDisable()
         {
+            GroundSortingRequested?.Invoke(this);
+            ActiveItems.Remove(this);
             CancelSnap();
             RestoreThrowerCollisions();
+        }
+
+        private void OnEnable()
+        {
+            ActiveItems.Add(this);
         }
 
         private void OnDestroy()

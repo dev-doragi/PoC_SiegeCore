@@ -796,17 +796,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatEncounter
   _factory: {fileID: 1777149723}
-  _supply: {fileID: 1777149721}
   _enemyExit: {fileID: 220080654}
   _enemyCannons:
   - {fileID: 511978070}
   _status: {fileID: 0}
-  _supplyInterval: 10
   _enemyUnitInterval: 10
   _enemyShotInterval: 10
   _enemyUnits: 01000000020000000100000003000000
   _enemyShots: 010000000100000003000000
-  _looseSupplyLimit: 12
 --- !u!114 &501205956
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1143,120 +1140,6 @@ MonoBehaviour:
       m_PostInfinity: 2
       m_RotationOrder: 4
   CustomBlends: {fileID: 0}
---- !u!1 &861121841
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 861121844}
-  - component: {fileID: 861121843}
-  - component: {fileID: 861121842}
-  m_Layer: 0
-  m_Name: AmmoDispenser
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!114 &861121842
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 861121841}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d319a3c159e64f2f94e9728941ed39af, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Cannon.AmmoDispenser
-  _poolManager: {fileID: 1144848505}
-  _outlet: {fileID: 861121844}
-  _groundTilemap: {fileID: 1618234871}
-  _ammo:
-  - Prefab: {fileID: 100006, guid: 932601d198604bf3a73e9b644d430226, type: 3}
-    Count: 30
-  _automatic: 1
-  _interval: 5
-  _ejectDirection: {x: 1, y: 0}
-  _ejectSpeed: 3
---- !u!212 &861121843
-SpriteRenderer:
-  serializedVersion: 2
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 861121841}
-  m_Enabled: 1
-  m_CastShadows: 0
-  m_ReceiveShadows: 0
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 0
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 0
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 1888895783
-  m_SortingLayer: 2
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: 053dc8250dd718d43bd66e882cc56bbc, type: 3}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_FlipX: 0
-  m_FlipY: 0
-  m_DrawMode: 0
-  m_Size: {x: 1, y: 2}
-  m_AdaptiveModeThreshold: 0.5
-  m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
-  m_SpriteSortPoint: 0
---- !u!4 &861121844
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 861121841}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: -0.7071068, w: 0.7071068}
-  m_LocalPosition: {x: -14.52, y: 2.55, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: -90}
 --- !u!1001 &886957708
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1684,12 +1567,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1144848504}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1939311823}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1164406763
 GameObject:
@@ -8839,6 +8722,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1777149721}
   - component: {fileID: 1777149723}
+  - component: {fileID: 1777149724}
   - component: {fileID: 1777149722}
   m_Layer: 0
   m_Name: RatFactory
@@ -8937,6 +8821,24 @@ MonoBehaviour:
   _basicPool: {fileID: 11400000, guid: 0e0731ba57f04afea61ef001c8e6f180, type: 2}
   _bbPool: {fileID: 11400000, guid: 76f62d533ebb42c28e2c6de71e311f21, type: 2}
   _bbbPool: {fileID: 11400000, guid: 3c39686fa2184d548a07f1e11198d160, type: 2}
+--- !u!114 &1777149724
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1777149720}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d319a3c159e64f2f94e9728941ed39af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatDispenser
+  _factory: {fileID: 1777149723}
+  _faction: 0
+  _outlet: {fileID: 1777149721}
+  _spawnInterval: 5
+  _ejectDirection: {x: 1, y: 0}
+  _ejectSpeed: 2
 --- !u!1 &1807365966
 GameObject:
   m_ObjectHideFlags: 0
@@ -9208,6 +9110,54 @@ MonoBehaviour:
   _slotType: 4
   _slotTilemap: {fileID: 1935780122}
   _targetSlot: {fileID: 388735521}
+--- !u!1 &1939311821
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1939311823}
+  - component: {fileID: 1939311822}
+  m_Layer: 0
+  m_Name: SceneContext
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1939311822
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1939311821}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4da997740ae3c1a43adc809d12444897, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SceneContext
+  _initialState: 4
+  _services:
+  - {fileID: 1144848505}
+--- !u!4 &1939311823
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1939311821}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1144848506}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &1988919416 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 5815787538757299612, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
@@ -9456,9 +9406,9 @@ PrefabInstance:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
+  - {fileID: 1939311823}
   - {fileID: 501205959}
   - {fileID: 1777149721}
-  - {fileID: 1144848506}
   - {fileID: 844662686}
   - {fileID: 187190615}
   - {fileID: 1132429237}
@@ -9469,4 +9419,3 @@ SceneRoots:
   - {fileID: 209792777}
   - {fileID: 220080654}
   - {fileID: 1143547438}
-  - {fileID: 861121844}

@@ -1,11 +1,12 @@
 using System.Collections.Generic;
+using SiegeCore.Player;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
 namespace SiegeCore.Rat
 {
     [RequireComponent(typeof(RatAgent))]
-    [RequireComponent(typeof(Rigidbody2D))]
+    [RequireComponent(typeof(CarryableObject))]
     public sealed class RatGroundAI : MonoBehaviour
     {
         [Header("Idle")]
@@ -22,7 +23,7 @@ namespace SiegeCore.Rat
         private float _repathInterval = 0.3f;
 
         private RatAgent _agent;
-        private Rigidbody2D _body;
+        private CarryableObject _carryable;
         private RatBattlefield _battlefield;
 
         private readonly List<Vector3> _path =
@@ -42,7 +43,7 @@ namespace SiegeCore.Rat
         private void Awake()
         {
             _agent = GetComponent<RatAgent>();
-            _body = GetComponent<Rigidbody2D>();
+            _carryable = GetComponent<CarryableObject>();
         }
 
         private void OnEnable()
@@ -73,10 +74,6 @@ namespace SiegeCore.Rat
 
                 case RatState.GroundCombat:
                     UpdateCombat();
-                    break;
-
-                default:
-                    StopMovement();
                     break;
             }
         }
@@ -263,7 +260,7 @@ namespace SiegeCore.Rat
 
                 float distance =
                     ((Vector2)candidate.transform.position
-                    - _body.position).sqrMagnitude;
+                    - _carryable.PhysicsPosition).sqrMagnitude;
 
                 if (distance >= nearestDistance)
                 {
@@ -280,7 +277,7 @@ namespace SiegeCore.Rat
         private void UpdateRatTarget(RatAgent target)
         {
             float distance = Vector2.Distance(
-                _body.position,
+                _carryable.PhysicsPosition,
                 target.transform.position);
 
             if (distance <= _agent.Definition.AttackRange)
@@ -346,7 +343,7 @@ namespace SiegeCore.Rat
             RatStructure target)
         {
             float distance = Vector2.Distance(
-                _body.position,
+                _carryable.PhysicsPosition,
                 target.transform.position);
 
             if (distance <= _agent.Definition.AttackRange)
@@ -416,7 +413,7 @@ namespace SiegeCore.Rat
                 return;
             }
 
-            Vector2 current = _body.position;
+            Vector2 current = _carryable.PhysicsPosition;
             Vector2 target = _path[_waypointIndex];
 
             Vector2 delta = target - current;
@@ -432,7 +429,11 @@ namespace SiegeCore.Rat
                 target,
                 speed * Time.fixedDeltaTime);
 
-            _body.MovePosition(next);
+            if (!_carryable.TryMoveOnGround(next))
+            {
+                StopMovement();
+                return;
+            }
 
             if (Vector2.Distance(next, target) <= 0.02f)
             {
@@ -444,11 +445,6 @@ namespace SiegeCore.Rat
         {
             IsMoving = false;
             MoveDirection = Vector2.zero;
-
-            if (_body != null)
-            {
-                _body.linearVelocity = Vector2.zero;
-            }
         }
     }
 }

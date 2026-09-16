@@ -19,7 +19,7 @@ namespace SiegeCore.Rat
             new Vector2(1f, -0.2f);
 
         [SerializeField, Min(0f)]
-        private float _upwardSpeed = 3f;
+        private float _ejectSpeed = 2f;
 
         private float _nextSpawnTime;
 
@@ -61,22 +61,10 @@ namespace SiegeCore.Rat
                 return;
             }
 
-            Vector3 worldDirection =
-                _outlet.TransformDirection(
-                    new Vector3(
-                        _ejectDirection.x,
-                        _ejectDirection.y,
-                        0f));
-
-            Vector2 direction =
-                new Vector2(
-                    worldDirection.x,
-                    worldDirection.y);
-
             rat.Carryable.TryDispense(
                 _factory.Battlefield.Ground,
-                direction.normalized,
-                _upwardSpeed);
+                _ejectDirection.normalized,
+                _ejectSpeed);
         }
     }
 }
