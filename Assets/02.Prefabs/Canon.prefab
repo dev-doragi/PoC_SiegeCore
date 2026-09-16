@@ -311,13 +311,11 @@ MonoBehaviour:
   _visual: {fileID: 216888542188453078}
   _sourceSlot: {fileID: 0}
   _groundTilemap: {fileID: 0}
-  _projectilePool: {fileID: 0}
   _maxLoadCount: 3
   _trajectoryType: 1
   _fireInterval: 1.5
   _projectileFlightDuration: 3
   _projectileArcHeight: 10
-  _projectileDamage: 10
   _carriedScale: {x: 1, y: 1, z: 1}
   _carryTweenDuration: 0.2
   _slotSearchRadius: 1

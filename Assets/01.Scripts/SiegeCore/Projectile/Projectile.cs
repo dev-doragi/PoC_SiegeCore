@@ -1,118 +1,188 @@
 using SiegeCore.Cannon;
 using SiegeCore.Player;
+using SiegeCore.Rat;
 using UnityEngine;
 
 namespace SiegeCore.Projectile
 {
-    [RequireComponent(typeof(Rigidbody2D), typeof(Collider2D))]
+    [RequireComponent(typeof(RatAgent))]
+    [RequireComponent(typeof(CarryableObject))]
+    [RequireComponent(typeof(Collider2D))]
     public sealed class Projectile : MonoBehaviour
     {
-        [SerializeField] private Transform _visual;
+        [SerializeField, Min(0f)]
+        private float _cancellationHeightDifference = 0.5f;
 
-        private ProjectilePool _owner;
-        private Rigidbody2D _rigidbody;
-        private Vector3 _visualRestPosition;
-        private Vector2 _startPosition;
-        private Vector2 _targetPosition;
-        private float _flightDuration;
-        private float _flightTime;
-        private float _arcHeight;
-        private float _damage;
+        private RatAgent _agent;
+        private CarryableObject _carryable;
 
-        public VehicleSide Side { get; private set; }
-        public CannonTrajectoryType TrajectoryType { get; private set; }
-        public float Height { get; private set; }
-        public bool IsCannonFlight { get; private set; }
+        private bool _isActive;
+        private bool _resolved;
+
+        public VehicleSide Side
+        {
+            get { return _agent.AttackSide; }
+        }
+
+        public float Height
+        {
+            get { return _carryable.Height; }
+        }
+
+        public bool IsCannonFlight
+        {
+            get
+            {
+                return _isActive
+                    && !_resolved
+                    && _agent.State == RatState.CannonFlight;
+            }
+        }
 
         private void Awake()
         {
-            _rigidbody = GetComponent<Rigidbody2D>();
-            _rigidbody.gravityScale = 0f;
-            _rigidbody.bodyType = RigidbodyType2D.Kinematic;
-            if (_visual == null || _visual == transform)
-            {
-                Debug.LogError("[Projectile] Assign a separate Visual child.", this);
-                enabled = false;
-                return;
-            }
-            _visualRestPosition = _visual.localPosition;
+            _agent = GetComponent<RatAgent>();
+            _carryable = GetComponent<CarryableObject>();
+
             Collider2D collider = GetComponent<Collider2D>();
             collider.isTrigger = true;
         }
 
-        public void Launch(ProjectilePool owner, Vector3 startPosition, Vector3 targetPosition, VehicleSide side,
-            CannonTrajectoryType trajectoryType, float flightDuration, float arcHeight, float damage)
+        private void OnEnable()
         {
-            // This prefab may also be used as pickup ammunition in the scene.
-            // Only pooled flight hands presentation and physics over to Projectile.
-            CarryableObject ammunition = GetComponent<CarryableObject>();
-            if (ammunition != null) ammunition.enabled = false;
+            _agent.StateChanged += HandleStateChanged;
 
-            _owner = owner;
-            Side = side;
-            TrajectoryType = trajectoryType;
-            _startPosition = startPosition;
-            _targetPosition = targetPosition;
-            _flightDuration = Mathf.Max(0.01f, flightDuration);
-            _flightTime = 0f;
-            _arcHeight = Mathf.Max(0f, arcHeight);
-            _damage = Mathf.Max(0f, damage);
-            Height = 0f;
-            IsCannonFlight = true;
-            _rigidbody.position = _startPosition;
-            transform.position = _startPosition;
-            _rigidbody.bodyType = RigidbodyType2D.Kinematic;
-            _rigidbody.linearVelocity = Vector2.zero;
-            _rigidbody.angularVelocity = 0f;
-            _rigidbody.simulated = true;
-            GetComponent<Collider2D>().isTrigger = true;
-            _visual.gameObject.SetActive(true);
-            UpdateVisual();
+            RefreshState(_agent.State);
         }
 
-        private void FixedUpdate()
+        private void OnDisable()
         {
-            if (!IsCannonFlight) return;
+            _agent.StateChanged -= HandleStateChanged;
 
-            _flightTime += Time.fixedDeltaTime;
-            float progress = Mathf.Clamp01(_flightTime / _flightDuration);
-            Vector2 position = Vector2.Lerp(_startPosition, _targetPosition, progress);
-            _rigidbody.MovePosition(position);
-            Height = TrajectoryType == CannonTrajectoryType.Arc
-                ? 4f * _arcHeight * progress * (1f - progress)
-                : 0f;
-
-            if (progress >= 1f) ReturnToPool();
+            _isActive = false;
+            _resolved = false;
         }
 
-        private void LateUpdate()
+        private void Update()
         {
-            if (IsCannonFlight) UpdateVisual();
+            if (!IsCannonFlight)
+            {
+                return;
+            }
+
+            /*
+             * 실제 비행은 CarryableObject가 담당한다.
+             * CarryableObject의 CannonFlight가 끝났다면
+             * 목적지까지 정상 비행이 끝난 것이다.
+             */
+            if (!_carryable.IsCannonFlight)
+            {
+                Resolve();
+            }
         }
 
-        private void UpdateVisual()
+        private void HandleStateChanged(
+            RatAgent agent,
+            RatState previousState,
+            RatState nextState)
         {
-            if (_visual == null) return;
-            _visual.position = transform.TransformPoint(_visualRestPosition) + Vector3.up * Height;
+            RefreshState(nextState);
+        }
+
+        private void RefreshState(RatState state)
+        {
+            if (state == RatState.CannonFlight)
+            {
+                _isActive = true;
+                _resolved = false;
+                return;
+            }
+
+            _isActive = false;
         }
 
         private void OnTriggerEnter2D(Collider2D other)
         {
-            if (!IsCannonFlight) return;
-            SiegeHealth siege = other.GetComponentInParent<SiegeHealth>();
-            if (siege == null || siege.Side == Side) return;
+            if (!IsCannonFlight)
+            {
+                return;
+            }
 
-            siege.TakeProjectileDamage(Side, _damage, transform.position);
-            ReturnToPool();
+            Projectile otherProjectile =
+                other.GetComponentInParent<Projectile>();
+
+            if (otherProjectile != null
+                && otherProjectile != this)
+            {
+                TryCancel(otherProjectile);
+                return;
+            }
+
+            SiegeHealth siege =
+                other.GetComponentInParent<SiegeHealth>();
+
+            if (siege != null)
+            {
+                TryHitSiege(siege);
+            }
         }
 
-        public void ReturnToPool()
+        private void TryCancel(Projectile other)
         {
-            if (!IsCannonFlight) return;
-            IsCannonFlight = false;
-            Height = 0f;
-            _visual.localPosition = _visualRestPosition;
-            _owner?.Return(this);
+            if (!other.IsCannonFlight)
+            {
+                return;
+            }
+
+            if (other.Side == Side)
+            {
+                return;
+            }
+
+            float heightDifference =
+                Mathf.Abs(other.Height - Height);
+
+            if (heightDifference > _cancellationHeightDifference)
+            {
+                return;
+            }
+
+            Resolve();
+            other.Resolve();
+        }
+
+        private void TryHitSiege(SiegeHealth siege)
+        {
+            if (siege.Side == Side)
+            {
+                return;
+            }
+
+            siege.TakeProjectileDamage(
+                Side,
+                _agent.Definition.ProjectileDamage,
+                transform.position);
+
+            Resolve();
+        }
+
+        public void Resolve()
+        {
+            if (_resolved)
+            {
+                return;
+            }
+
+            _resolved = true;
+            _isActive = false;
+
+            /*
+             * BBB라면 원래 Faction 기준 Basic Rat을 배출한다.
+             * RatAgent 내부에서 중복 Burst는 방지한다.
+             */
+            _agent.TryBurstContents();
+
+            _agent.Release();
         }
     }
 }

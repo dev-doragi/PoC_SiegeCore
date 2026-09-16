@@ -43,6 +43,26 @@ namespace SiegeCore.Player
             }
         }
         public PlayerController Player => _player;
+        public bool InteractionLocked { get; set; }
+        public ICarryable GetHeld(int index) => index >= 0 && index < HeldCount ? _heldObjects[index] : null;
+
+        public bool ReplaceTopPair(SiegeCore.Rat.RatAgent result)
+        {
+            int count = HeldCount;
+            if (count < 2 || result == null || !result.Carryable.TryPickUp(GetHoldPoint(count - 2))) { return false; }
+            for (int index = count - 1; index >= count - 2; index--)
+            {
+                ICarryable item = _heldObjects[index];
+                RestoreCarrySorting(item);
+                _heldObjects.RemoveAt(index);
+                SiegeCore.Rat.RatAgent rat = ((Component)item).GetComponent<SiegeCore.Rat.RatAgent>();
+                rat.Release();
+            }
+            _heldObjects.Add(result.Carryable);
+            CaptureCarrySorting(result.Carryable);
+            RefreshCarrySorting();
+            return true;
+        }
 
         private void Awake()
         {
@@ -106,6 +126,7 @@ namespace SiegeCore.Player
 
         public bool TryPickUpNearest()
         {
+            if (InteractionLocked) { return false; }
             int count = HeldCount;
             if (count >= Mathf.Clamp(_maxCarryCount, 1, 3) || GetHoldPoint(count) == null) return false;
             if (count > 0 && _heldObjects[0] is SiegeCore.Cannon.Cannon) return false;
@@ -158,6 +179,7 @@ namespace SiegeCore.Player
 
         public bool TryThrow()
         {
+            if (InteractionLocked) { return false; }
             if (!HasHeldObject) return false;
             ICarryable heldObject = HeldObject;
 
@@ -202,7 +224,7 @@ namespace SiegeCore.Player
             for (int index = _heldObjects.Count - 1; index >= 0; index--)
             {
                 ICarryable item = _heldObjects[index];
-                if (item is Component component && component != null && item.IsCarried) continue;
+                if (item is Component component && component != null && component.gameObject.activeInHierarchy && item.IsCarried) continue;
                 RestoreCarrySorting(item);
                 _heldObjects.RemoveAt(index);
                 changed = true;

@@ -1,8 +1,9 @@
-using System.Collections.Generic;
-using UnityEngine;
-using UnityEngine.Tilemaps;
+using System;
 using DG.Tweening;
 using SiegeCore.Cannon;
+using SiegeCore.Rat;
+using UnityEngine;
+using UnityEngine.Tilemaps;
 
 namespace SiegeCore.Player
 {
@@ -13,7 +14,6 @@ namespace SiegeCore.Player
         [SerializeField] private Tilemap _groundTilemap;
         [SerializeField, Min(0f)] private float _snapSteering = 12f;
         [SerializeField, Min(0.01f)] private float _snapFinishDuration = 0.12f;
-        [SerializeField, Min(0.1f)] private float _occupiedCellBounceHeight = 0.3f;
 
         [Header("Presentation")]
         [SerializeField] private Transform _visual;
@@ -28,62 +28,107 @@ namespace SiegeCore.Player
         [SerializeField, Min(0.01f)] private float _minimumBounceSpeed = 0.8f;
         [SerializeField, Range(0f, 1f)] private float _wallRestitution = 0.5f;
 
-        [Header("Cannon Fire")]
-        [SerializeField, Min(0.01f)] private float _cannonFlightDuration = 3f;
-        [SerializeField, Min(0f)] private float _cannonArcHeight = 2f;
+        [Header("Cannon")]
+        [SerializeField, Min(0.01f)] private float _defaultCannonFlightDuration = 3f;
+        [SerializeField, Min(0f)] private float _defaultCannonArcHeight = 2f;
 
         private Rigidbody2D _rigidbody;
         private Collider2D _collider;
+        private RatAgent _rat;
+
         private Transform _worldParent;
+
         private Vector3 _visualRestPosition;
         private Vector3 _shadowRestScale;
+
         private PhysicsMaterial2D _flightMaterial;
         private PhysicsMaterial2D _originalMaterial;
+
         private Collider2D[] _ignoredColliders;
+
         private float _height;
         private float _verticalSpeed;
+
         private Vector2 _snapTarget;
         private bool _hasSnapTarget;
+        private bool _isSnapping;
         private Tween _snapTween;
+
         private float _cannonFlightTime;
+        private float _cannonFlightDuration;
+        private float _cannonArcHeight;
+
         private Vector2 _cannonStartPosition;
         private Vector2 _cannonTargetPosition;
-        private static readonly HashSet<CarryableObject> ActiveItems = new HashSet<CarryableObject>();
-        private Vector2 _lastGroundPosition;
-        private bool _hasGroundPosition;
-        private readonly HashSet<Vector3Int> _occupiedCells = new HashSet<Vector3Int>();
-        private readonly Queue<Vector3Int> _searchQueue = new Queue<Vector3Int>();
-        private readonly Dictionary<Vector3Int, Vector3Int> _searchParents = new Dictionary<Vector3Int, Vector3Int>();
-        private readonly List<Vector2> _landingPath = new List<Vector2>();
-        private int _landingPathIndex;
-        private float _nextLandingSearchTime;
 
-        private void OnEnable()
-        {
-            ActiveItems.Add(this);
-            _hasGroundPosition = false;
-        }
+        public event Action StateChanged;
+        public event Action<IThrowable> GroundSortingRequested;
 
         public bool IsCarried { get; private set; }
-        public event System.Action<IThrowable> GroundSortingRequested;
         public bool IsAirborne { get; private set; }
         public bool IsLoaded { get; private set; }
         public bool IsCannonFlight { get; private set; }
+
         public CannonTrajectoryType TrajectoryType { get; private set; }
-        public float Height => _height;
-        public bool CanEnterCannon => isActiveAndEnabled && !IsCarried && !IsLoaded && !IsCannonFlight
-            && IsAirborne;
-        public Transform CarryTransform => transform;
-        public bool CanBePickedUp => !IsCarried && !IsAirborne && !IsLoaded && isActiveAndEnabled;
+
+        public float Height
+        {
+            get { return _height; }
+        }
+
+        public Transform CarryTransform
+        {
+            get { return transform; }
+        }
+
+        public bool CanBePickedUp
+        {
+            get
+            {
+                if (!isActiveAndEnabled
+                    || IsCarried
+                    || IsAirborne
+                    || IsLoaded
+                    || IsCannonFlight)
+                {
+                    return false;
+                }
+
+                if (_rat != null)
+                {
+                    return _rat.CanPickUp;
+                }
+
+                return true;
+            }
+        }
+
+        public bool CanEnterCannon
+        {
+            get
+            {
+                return isActiveAndEnabled
+                    && IsAirborne
+                    && !IsCarried
+                    && !IsLoaded
+                    && !IsCannonFlight;
+            }
+        }
 
         private void Awake()
         {
             _rigidbody = GetComponent<Rigidbody2D>();
             _collider = GetComponent<Collider2D>();
+            _rat = GetComponent<RatAgent>();
+
+            _worldParent = transform.parent;
+
             _rigidbody.gravityScale = 0f;
             _rigidbody.freezeRotation = true;
+
             _originalMaterial = _collider.sharedMaterial;
-            _flightMaterial = new PhysicsMaterial2D("Carryable flight")
+
+            _flightMaterial = new PhysicsMaterial2D("Carryable Flight")
             {
                 bounciness = _wallRestitution,
                 friction = 0f
@@ -91,477 +136,786 @@ namespace SiegeCore.Player
 
             if (_visual == null || _visual == transform)
             {
-                Debug.LogError("[CarryableObject] Assign a separate Visual child for height display.", this);
+                Debug.LogError(
+                    "[CarryableObject] Assign a separate Visual child.",
+                    this);
+
                 enabled = false;
                 return;
             }
 
             _visualRestPosition = _visual.localPosition;
-            if (_shadow != null) _shadowRestScale = _shadow.transform.localScale;
-            SettleOnGround();
+
+            if (_shadow != null)
+            {
+                _shadowRestScale = _shadow.transform.localScale;
+            }
+
+            CompleteSettle(false);
         }
 
         private void FixedUpdate()
         {
-            if (!IsAirborne) return;
-            if (IsCannonFlight)
+            if (!IsAirborne || _isSnapping)
             {
-                _cannonFlightTime -= Time.fixedDeltaTime;
-                float duration = Mathf.Max(0.01f, _cannonFlightDuration);
-                float progress = Mathf.Clamp01(1f - _cannonFlightTime / duration);
-                Vector2 position = Vector2.Lerp(_cannonStartPosition, _cannonTargetPosition, progress);
-                _rigidbody.MovePosition(position);
-                _height = TrajectoryType == CannonTrajectoryType.Arc
-                    ? 4f * _cannonArcHeight * progress * (1f - progress)
-                    : 0f;
-                if (_cannonFlightTime <= 0f)
-                {
-                    _rigidbody.position = _cannonTargetPosition;
-                    _height = 0f;
-                    SettleOnGround();
-                }
                 return;
             }
 
-            // Solve height independently of XY, including the time left after each impact.
+            if (IsCannonFlight)
+            {
+                UpdateCannonFlight();
+                return;
+            }
+
+            UpdateThrowFlight();
+        }
+
+        private void LateUpdate()
+        {
+            UpdateHeightPresentation();
+        }
+
+        // --------------------------------------------------------------------
+        // Reset
+        // --------------------------------------------------------------------
+
+        public void ResetForRat(Tilemap groundTilemap)
+        {
+            CancelSnap();
+            RestoreThrowerCollisions();
+
+            _groundTilemap = groundTilemap;
+            _worldParent = transform.parent;
+
+            IsCarried = false;
+            IsAirborne = false;
+            IsLoaded = false;
+            IsCannonFlight = false;
+
+            _height = 0f;
+            _verticalSpeed = 0f;
+
+            _rigidbody.linearVelocity = Vector2.zero;
+            _rigidbody.angularVelocity = 0f;
+            _rigidbody.bodyType = RigidbodyType2D.Kinematic;
+            _rigidbody.simulated = true;
+
+            _collider.isTrigger = true;
+            _collider.sharedMaterial = _originalMaterial;
+
+            ResetVisualHeight();
+
+            NotifyStateChanged();
+        }
+
+        // --------------------------------------------------------------------
+        // Pickup
+        // --------------------------------------------------------------------
+
+        public bool TryPickUp(Transform holdPoint)
+        {
+            if (!CanBePickedUp
+                || holdPoint == null
+                || holdPoint.IsChildOf(transform))
+            {
+                return false;
+            }
+
+            CancelSnap();
+
+            _worldParent = transform.parent;
+
+            IsCarried = true;
+            IsAirborne = false;
+            IsLoaded = false;
+            IsCannonFlight = false;
+
+            _height = 0f;
+            _verticalSpeed = 0f;
+
+            _rigidbody.linearVelocity = Vector2.zero;
+            _rigidbody.simulated = false;
+
+            transform.SetParent(holdPoint, true);
+            transform.localPosition = Vector3.zero;
+
+            ResetVisualHeight();
+            NotifyStateChanged();
+
+            return true;
+        }
+
+        // --------------------------------------------------------------------
+        // Player Throw
+        // --------------------------------------------------------------------
+
+        public bool TryThrow(
+            Vector2 direction,
+            Vector3 groundPosition,
+            Collider2D[] throwerColliders)
+        {
+            if (!IsCarried
+                || direction.sqrMagnitude < 0.0001f
+                || !isActiveAndEnabled)
+            {
+                return false;
+            }
+
+            float initialHeight =
+                Mathf.Max(0f, transform.position.y - groundPosition.y);
+
+            transform.SetParent(_worldParent, true);
+            transform.position = groundPosition;
+            _rigidbody.position = groundPosition;
+
+            BeginThrow(
+                direction.normalized,
+                initialHeight,
+                _upwardSpeed,
+                throwerColliders);
+
+            return true;
+        }
+
+        public bool TryDispense(
+            Tilemap groundTilemap,
+            Vector2 direction,
+            float upwardSpeed)
+        {
+            if (!isActiveAndEnabled
+                || IsCarried
+                || IsLoaded
+                || IsCannonFlight
+                || direction.sqrMagnitude < 0.0001f)
+            {
+                return false;
+            }
+
+            _groundTilemap = groundTilemap;
+
+            BeginThrow(
+                direction.normalized,
+                0f,
+                upwardSpeed,
+                null);
+
+            return true;
+        }
+
+        public void BeginRatFall(
+            Tilemap groundTilemap,
+            float initialHeight)
+        {
+            CancelSnap();
+
+            _groundTilemap = groundTilemap;
+
+            IsCarried = false;
+            IsLoaded = false;
+            IsCannonFlight = false;
+            IsAirborne = true;
+
+            _height = Mathf.Max(0f, initialHeight);
+            _verticalSpeed = 0f;
+
+            _rigidbody.bodyType = RigidbodyType2D.Dynamic;
+            _rigidbody.simulated = true;
+            _rigidbody.linearVelocity = Vector2.zero;
+
+            _collider.isTrigger = false;
+            _collider.sharedMaterial = _flightMaterial;
+
+            NotifyStateChanged();
+        }
+
+        private void BeginThrow(
+            Vector2 direction,
+            float initialHeight,
+            float upwardSpeed,
+            Collider2D[] ignoredColliders)
+        {
+            CancelSnap();
+
+            IsCarried = false;
+            IsLoaded = false;
+            IsCannonFlight = false;
+            IsAirborne = true;
+
+            _height = initialHeight;
+            _verticalSpeed = Mathf.Max(0f, upwardSpeed);
+
+            _rigidbody.bodyType = RigidbodyType2D.Dynamic;
+            _rigidbody.linearDamping = 0f;
+            _rigidbody.simulated = true;
+            _rigidbody.linearVelocity =
+                direction * _throwSpeed;
+
+            _collider.isTrigger = false;
+            _collider.sharedMaterial = _flightMaterial;
+
+            IgnoreThrowerCollisions(ignoredColliders);
+
+            NotifyStateChanged();
+        }
+
+        // --------------------------------------------------------------------
+        // Bounce
+        // --------------------------------------------------------------------
+
+        private void UpdateThrowFlight()
+        {
             float remainingTime = Time.fixedDeltaTime;
             float gravity = Mathf.Max(0.01f, _heightGravity);
-            while (remainingTime > 0f && IsAirborne)
+
+            while (remainingTime > 0f
+                   && IsAirborne
+                   && !_isSnapping)
             {
-                float impactSpeed = Mathf.Sqrt(_verticalSpeed * _verticalSpeed + 2f * gravity * _height);
-                float impactTime = (_verticalSpeed + impactSpeed) / gravity;
+                float impactSpeed = Mathf.Sqrt(
+                    _verticalSpeed * _verticalSpeed
+                    + 2f * gravity * _height);
+
+                float impactTime =
+                    (_verticalSpeed + impactSpeed) / gravity;
+
                 if (impactTime > remainingTime)
                 {
-                    _height += _verticalSpeed * remainingTime - 0.5f * gravity * remainingTime * remainingTime;
+                    _height +=
+                        _verticalSpeed * remainingTime
+                        - 0.5f
+                        * gravity
+                        * remainingTime
+                        * remainingTime;
+
                     _verticalSpeed -= gravity * remainingTime;
                     break;
                 }
 
                 remainingTime -= impactTime;
-                GroundSortingRequested?.Invoke(this);
+
                 _height = 0f;
-                _verticalSpeed = impactSpeed * Mathf.Clamp(_bounceRestitution, 0f, 0.9f);
-                _rigidbody.linearVelocity *= Mathf.Clamp01(_groundSpeedRetention);
-                if (!_hasSnapTarget) TryChooseSnapTarget();
-                if (_landingPathIndex < _landingPath.Count
-                    && Vector2.Distance(_rigidbody.position, _landingPath[_landingPathIndex]) <= 0.1f)
-                    _landingPathIndex++;
-                if (_verticalSpeed < Mathf.Max(0.01f, _minimumBounceSpeed))
+
+                _verticalSpeed =
+                    impactSpeed
+                    * Mathf.Clamp(
+                        _bounceRestitution,
+                        0f,
+                        0.9f);
+
+                _rigidbody.linearVelocity *=
+                    Mathf.Clamp01(_groundSpeedRetention);
+
+                if (!_hasSnapTarget)
                 {
-                    if (_groundTilemap != null && (!_hasSnapTarget
-                        || _landingPathIndex < _landingPath.Count
-                        || Vector2.Distance(_rigidbody.position, _snapTarget) > 0.1f))
-                        _verticalSpeed = Mathf.Sqrt(2f * gravity * Mathf.Max(0.1f, _occupiedCellBounceHeight));
-                    else SettleOnGround(snapToTile: true);
+                    TryChooseSnapTarget();
+                }
+
+                if (_verticalSpeed
+                    < Mathf.Max(
+                        0.01f,
+                        _minimumBounceSpeed))
+                {
+                    BeginSnapToGround();
+                    return;
                 }
             }
 
-            if (IsAirborne && _hasSnapTarget)
+            if (_hasSnapTarget)
             {
-                float travelTime = Mathf.Max(Time.fixedDeltaTime, GetRemainingTravelTime());
-                Vector2 waypoint = _landingPathIndex < _landingPath.Count
-                    ? _landingPath[_landingPathIndex] : _snapTarget;
-                Vector2 desiredVelocity = (waypoint - _rigidbody.position) / travelTime;
-                desiredVelocity = Vector2.ClampMagnitude(desiredVelocity, Mathf.Max(0.1f, _throwSpeed * 1.5f));
-                float blend = 1f - Mathf.Exp(-Mathf.Max(0f, _snapSteering) * Time.fixedDeltaTime);
-                _rigidbody.linearVelocity = Vector2.Lerp(_rigidbody.linearVelocity, desiredVelocity, blend);
+                SteerTowardSnapTarget();
             }
-            ConstrainToGround();
         }
 
-        private void LateUpdate()
-        {
-            if (IsAirborne && !IsCannonFlight) ConstrainToGround();
-            UpdatePresentation();
-        }
+        // --------------------------------------------------------------------
+        // Snap
+        // --------------------------------------------------------------------
 
-        private void UpdatePresentation()
+        private void TryChooseSnapTarget()
         {
-            if (_visual == null || _visual == transform) return;
-            // World-unit height remains correct even if the prefab is scaled.
-            _visual.position = transform.TransformPoint(_visualRestPosition) + Vector3.up * _height;
-            if (_shadow == null) return;
-            _shadow.enabled = !IsCarried && !IsLoaded;
-            _shadow.transform.localScale = _shadowRestScale * Mathf.Lerp(1f, 0.6f, Mathf.Clamp01(_height / 2f));
-        }
-
-        public bool TryPickUp(Transform holdPoint)
-        {
-            if (IsCarried || IsAirborne || IsLoaded || holdPoint == null || !isActiveAndEnabled) return false;
-            CancelSnap();
-            _worldParent = transform.parent;
-            _rigidbody.simulated = false;
-            IsCarried = true;
-            transform.SetParent(holdPoint, true);
-            transform.localPosition = Vector3.zero;
-            UpdatePresentation();
-            return true;
-        }
-
-        public bool TryThrow(Vector2 direction, Vector3 groundPosition, Collider2D[] throwerColliders)
-        {
-            if (!IsCarried || direction.sqrMagnitude < 0.0001f || !isActiveAndEnabled) return false;
-            CancelSnap();
-            _height = Mathf.Max(0f, transform.position.y - groundPosition.y);
-            _verticalSpeed = _upwardSpeed;
-            transform.SetParent(_worldParent, true);
-            transform.position = groundPosition;
-            _rigidbody.position = groundPosition;
-            IsCarried = false;
-            IsAirborne = true;
-            _rigidbody.bodyType = RigidbodyType2D.Dynamic;
-            _rigidbody.linearDamping = 0f;
-            _collider.isTrigger = true; // Detect intake overlaps without physical pushing.
-            _flightMaterial.bounciness = _wallRestitution;
-            _collider.sharedMaterial = _flightMaterial;
-            _rigidbody.simulated = true;
-            _rigidbody.linearVelocity = direction.normalized * _throwSpeed;
-            ConstrainToGround();
-
-            // The throw starts close to the player, so ignore the thrower until landing.
-            _ignoredColliders = throwerColliders;
-            if (_ignoredColliders != null)
+            if (_groundTilemap == null)
             {
-                foreach (Collider2D other in _ignoredColliders)
+                return;
+            }
+
+            Vector2 expectedPosition =
+                _rigidbody.position
+                + _rigidbody.linearVelocity
+                * GetRemainingTravelTime();
+
+            Vector3 worldPosition = new Vector3(
+                expectedPosition.x,
+                expectedPosition.y,
+                transform.position.z);
+
+            Vector3Int cell =
+                _groundTilemap.WorldToCell(worldPosition);
+
+            if (!_groundTilemap.HasTile(cell))
+            {
+                return;
+            }
+
+            _snapTarget =
+                _groundTilemap.GetCellCenterWorld(cell);
+
+            _hasSnapTarget = true;
+        }
+
+        private void SteerTowardSnapTarget()
+        {
+            float travelTime = Mathf.Max(
+                Time.fixedDeltaTime,
+                GetRemainingTravelTime());
+
+            Vector2 desiredVelocity =
+                (_snapTarget - _rigidbody.position)
+                / travelTime;
+
+            desiredVelocity = Vector2.ClampMagnitude(
+                desiredVelocity,
+                Mathf.Max(0.1f, _throwSpeed * 1.5f));
+
+            float blend =
+                1f - Mathf.Exp(
+                    -Mathf.Max(0f, _snapSteering)
+                    * Time.fixedDeltaTime);
+
+            _rigidbody.linearVelocity =
+                Vector2.Lerp(
+                    _rigidbody.linearVelocity,
+                    desiredVelocity,
+                    blend);
+        }
+
+        private void BeginSnapToGround()
+        {
+            if (!_hasSnapTarget)
+            {
+                TryChooseSnapTarget();
+            }
+
+            PrepareGroundPhysics();
+
+            if (!_hasSnapTarget)
+            {
+                CompleteSettle(true);
+                return;
+            }
+
+            _isSnapping = true;
+
+            _snapTween = _rigidbody
+                .DOMove(
+                    _snapTarget,
+                    Mathf.Max(
+                        0.01f,
+                        _snapFinishDuration))
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(UpdateType.Fixed)
+                .OnComplete(() =>
                 {
-                    if (other != null && other != _collider) Physics2D.IgnoreCollision(_collider, other, true);
-                }
-            }
-            UpdatePresentation();
-            return true;
-        }
+                    _snapTween = null;
+                    _isSnapping = false;
 
-        // Cleanup only: normal interaction uses TryThrow instead of placing the item.
-        public void Drop(Vector3 worldPosition)
-        {
-            if (!IsCarried) return;
-            transform.SetParent(_worldParent, true);
-            transform.position = worldPosition;
-            _rigidbody.position = worldPosition;
-            IsCarried = false;
-            SettleOnGround();
-            UpdatePresentation();
-        }
-
-        private void SettleOnGround(bool snapToTile = false)
-        {
-            IsAirborne = false;
-            IsCannonFlight = false;
-            _height = 0f;
-            _verticalSpeed = 0f;
-            _rigidbody.linearVelocity = Vector2.zero;
-            _rigidbody.angularVelocity = 0f;
-            _rigidbody.bodyType = RigidbodyType2D.Kinematic;
-            _collider.isTrigger = true;
-            _collider.sharedMaterial = _originalMaterial;
-            _rigidbody.simulated = true;
-            RestoreThrowerCollisions();
-            if (snapToTile) SnapToTileCenter();
+                    CompleteSettle(true);
+                });
         }
 
         private float GetRemainingTravelTime()
         {
-            float gravity = Mathf.Max(0.01f, _heightGravity);
-            float impactSpeed = Mathf.Sqrt(_verticalSpeed * _verticalSpeed + 2f * gravity * Mathf.Max(0f, _height));
-            float travelTime = Mathf.Max(0f, (_verticalSpeed + impactSpeed) / gravity);
-            float reboundSpeed = impactSpeed * Mathf.Clamp(_bounceRestitution, 0f, 0.9f);
-            float speedWeight = Mathf.Clamp01(_groundSpeedRetention);
-            // Weight each future hop by the horizontal speed it retains.
-            while (reboundSpeed >= Mathf.Max(0.01f, _minimumBounceSpeed))
+            float gravity =
+                Mathf.Max(0.01f, _heightGravity);
+
+            float impactSpeed = Mathf.Sqrt(
+                _verticalSpeed * _verticalSpeed
+                + 2f
+                * gravity
+                * Mathf.Max(0f, _height));
+
+            float travelTime =
+                Mathf.Max(
+                    0f,
+                    (_verticalSpeed + impactSpeed)
+                    / gravity);
+
+            float reboundSpeed =
+                impactSpeed
+                * Mathf.Clamp(
+                    _bounceRestitution,
+                    0f,
+                    0.9f);
+
+            float speedWeight =
+                Mathf.Clamp01(
+                    _groundSpeedRetention);
+
+            while (reboundSpeed
+                   >= Mathf.Max(
+                       0.01f,
+                       _minimumBounceSpeed))
             {
-                travelTime += 2f * reboundSpeed / gravity * speedWeight;
-                reboundSpeed *= Mathf.Clamp(_bounceRestitution, 0f, 0.9f);
-                speedWeight *= Mathf.Clamp01(_groundSpeedRetention);
+                travelTime +=
+                    2f
+                    * reboundSpeed
+                    / gravity
+                    * speedWeight;
+
+                reboundSpeed *=
+                    Mathf.Clamp(
+                        _bounceRestitution,
+                        0f,
+                        0.9f);
+
+                speedWeight *=
+                    Mathf.Clamp01(
+                        _groundSpeedRetention);
             }
+
             return travelTime;
         }
 
-        private void TryChooseSnapTarget()
-        {
-            if (_groundTilemap == null || Time.time < _nextLandingSearchTime) return;
-            CollectOccupiedCells();
-            Vector2 expectedPosition = _rigidbody.position + _rigidbody.linearVelocity * GetRemainingTravelTime();
-            expectedPosition = TraceGround(_rigidbody.position, expectedPosition);
-            Vector3Int cellPosition = GroundCell(expectedPosition);
-            if (TryReserveCell(cellPosition)) return;
+        // --------------------------------------------------------------------
+        // Ground
+        // --------------------------------------------------------------------
 
-            // BFS crosses occupied cells while airborne, reserving only the free endpoint.
-            // Each edge is one hop; the first free cell has the minimum hop count.
-            Vector3Int start = GroundCell(_rigidbody.position);
-            _searchQueue.Clear();
-            _searchParents.Clear();
-            _searchQueue.Enqueue(start);
-            _searchParents.Add(start, start);
-            int first = Random.Range(0, 8);
-            while (_searchQueue.Count > 0)
+        public void Drop(Vector3 worldPosition)
+        {
+            if (!IsCarried)
             {
-                Vector3Int current = _searchQueue.Dequeue();
-                if (_groundTilemap.HasTile(current) && !_occupiedCells.Contains(current))
-                {
-                    _snapTarget = _groundTilemap.GetCellCenterWorld(current);
-                    _hasSnapTarget = true;
-                    _landingPath.Clear();
-                    Vector3Int cursor = current;
-                    while (cursor != start)
-                    {
-                        _landingPath.Add(_groundTilemap.GetCellCenterWorld(cursor));
-                        cursor = _searchParents[cursor];
-                    }
-                    _landingPath.Add(_groundTilemap.GetCellCenterWorld(start));
-                    _landingPath.Reverse();
-                    _landingPathIndex = 0;
-                    _verticalSpeed = Mathf.Max(_verticalSpeed,
-                        Mathf.Sqrt(2f * Mathf.Max(0.01f, _heightGravity) * Mathf.Max(0.1f, _occupiedCellBounceHeight)));
-                    return;
-                }
-                for (int offset = 0; offset < 8; offset++)
-                {
-                    int index = (first + offset) % 8;
-                    int flatIndex = index < 4 ? index : index + 1;
-                    Vector3Int direction = new Vector3Int(flatIndex % 3 - 1, flatIndex / 3 - 1, 0);
-                    Vector3Int neighbor = current + direction;
-                    if (_searchParents.ContainsKey(neighbor) || !_groundTilemap.HasTile(neighbor)) continue;
-                    // Do not cut diagonally across missing ground at a corner.
-                    if (direction.x != 0 && direction.y != 0
-                        && (!_groundTilemap.HasTile(current + new Vector3Int(direction.x, 0, 0))
-                            || !_groundTilemap.HasTile(current + new Vector3Int(0, direction.y, 0)))) continue;
-                    _searchParents.Add(neighbor, current);
-                    _searchQueue.Enqueue(neighbor);
-                }
+                return;
             }
-            // Only a completely full connected region must wait. Avoid searching every impact.
-            _nextLandingSearchTime = Time.time + 0.5f;
+
+            transform.SetParent(_worldParent, true);
+            transform.position = worldPosition;
+            _rigidbody.position = worldPosition;
+
+            IsCarried = false;
+
+            CompleteSettle(true);
+        }
+
+        private void PrepareGroundPhysics()
+        {
+            _height = 0f;
+            _verticalSpeed = 0f;
+
             _rigidbody.linearVelocity = Vector2.zero;
+            _rigidbody.angularVelocity = 0f;
+            _rigidbody.bodyType = RigidbodyType2D.Kinematic;
+            _rigidbody.simulated = true;
+
+            _collider.isTrigger = true;
+            _collider.sharedMaterial = _originalMaterial;
+
+            RestoreThrowerCollisions();
         }
 
-        private Vector3Int GroundCell(Vector2 position)
+        private void CompleteSettle(bool notify)
         {
-            return _groundTilemap.WorldToCell(new Vector3(position.x, position.y, transform.position.z));
+            CancelSnap();
+
+            PrepareGroundPhysics();
+
+            IsCarried = false;
+            IsAirborne = false;
+            IsLoaded = false;
+            IsCannonFlight = false;
+
+            _hasSnapTarget = false;
+
+            ResetVisualHeight();
+
+            GroundSortingRequested?.Invoke(this); // �ٴڿ� ������ �������� ��
+
+            if (notify)
+            {
+                NotifyStateChanged();
+            }
         }
 
-        private bool TryReserveCell(Vector3Int cell)
+        // --------------------------------------------------------------------
+        // Cannon
+        // --------------------------------------------------------------------
+
+        public bool TryEnterCannon(
+            Transform storagePoint)
         {
-            if (!_groundTilemap.HasTile(cell) || _occupiedCells.Contains(cell)) return false;
-            Vector2 center = _groundTilemap.GetCellCenterWorld(cell);
-            if ((TraceGround(_rigidbody.position, center) - center).sqrMagnitude > 0.000001f) return false;
-            _snapTarget = center;
-            _hasSnapTarget = true;
+            if (!isActiveAndEnabled
+                || !IsAirborne
+                || IsCarried
+                || IsLoaded
+                || IsCannonFlight
+                || storagePoint == null
+                || storagePoint.IsChildOf(transform))
+            {
+                return false;
+            }
+
+            CancelSnap();
+            RestoreThrowerCollisions();
+
+            IsCarried = false;
+            IsAirborne = false;
+            IsLoaded = true;
+            IsCannonFlight = false;
+
+            _height = 0f;
+            _verticalSpeed = 0f;
+
+            _rigidbody.linearVelocity = Vector2.zero;
+            _rigidbody.angularVelocity = 0f;
+            _rigidbody.simulated = false;
+
+            transform.SetParent(storagePoint, true);
+            transform.localPosition = Vector3.zero;
+
+            ResetVisualHeight();
+            NotifyStateChanged();
+
             return true;
         }
 
-        private void CollectOccupiedCells()
+        public void LaunchFromCannon(
+            Vector3 muzzlePosition,
+            Vector3 targetPosition,
+            CannonTrajectoryType trajectoryType)
         {
-            _occupiedCells.Clear();
-            foreach (CarryableObject other in ActiveItems)
+            LaunchFromCannon(
+                muzzlePosition,
+                targetPosition,
+                trajectoryType,
+                _defaultCannonFlightDuration,
+                _defaultCannonArcHeight);
+        }
+
+        public void LaunchFromCannon(
+            Vector3 muzzlePosition,
+            Vector3 targetPosition,
+            CannonTrajectoryType trajectoryType,
+            float flightDuration,
+            float arcHeight)
+        {
+            if (!IsLoaded)
             {
-                if (other == null || other == this || !other.isActiveAndEnabled
-                    || other.IsCarried || other.IsLoaded || other.IsCannonFlight
-                    || other._groundTilemap != _groundTilemap) continue;
-                if (other._hasSnapTarget) _occupiedCells.Add(GroundCell(other._snapTarget));
-                if (!other.IsAirborne) _occupiedCells.Add(GroundCell(other.transform.position));
+                return;
+            }
+
+            CancelSnap();
+
+            transform.SetParent(_worldParent, true);
+
+            transform.position = muzzlePosition;
+            _rigidbody.position = muzzlePosition;
+
+            IsCarried = false;
+            IsLoaded = false;
+            IsAirborne = true;
+            IsCannonFlight = true;
+
+            TrajectoryType = trajectoryType;
+
+            _cannonFlightDuration =
+                Mathf.Max(0.01f, flightDuration);
+
+            _cannonArcHeight =
+                Mathf.Max(0f, arcHeight);
+
+            _cannonFlightTime = 0f;
+
+            _cannonStartPosition = muzzlePosition;
+            _cannonTargetPosition = targetPosition;
+
+            _height = 0f;
+            _verticalSpeed = 0f;
+
+            _rigidbody.bodyType = RigidbodyType2D.Kinematic;
+            _rigidbody.linearVelocity = Vector2.zero;
+            _rigidbody.simulated = true;
+
+            _collider.isTrigger = true;
+            _collider.sharedMaterial = _originalMaterial;
+
+            NotifyStateChanged();
+        }
+
+        private void UpdateCannonFlight()
+        {
+            _cannonFlightTime += Time.fixedDeltaTime;
+
+            float progress = Mathf.Clamp01(
+                _cannonFlightTime
+                / _cannonFlightDuration);
+
+            Vector2 position = Vector2.Lerp(
+                _cannonStartPosition,
+                _cannonTargetPosition,
+                progress);
+
+            _rigidbody.MovePosition(position);
+
+            _height =
+                TrajectoryType == CannonTrajectoryType.Arc
+                    ? 4f
+                      * _cannonArcHeight
+                      * progress
+                      * (1f - progress)
+                    : 0f;
+
+            if (progress < 1f)
+            {
+                return;
+            }
+
+            _rigidbody.position =
+                _cannonTargetPosition;
+
+            CompleteSettle(true);
+        }
+
+        // --------------------------------------------------------------------
+        // Presentation position only
+        // --------------------------------------------------------------------
+
+        private void UpdateHeightPresentation()
+        {
+            if (_visual == null)
+            {
+                return;
+            }
+
+            if (IsAirborne)
+            {
+                _visual.position =
+                    transform.TransformPoint(
+                        _visualRestPosition)
+                    + Vector3.up * _height;
+            }
+
+            if (_shadow == null)
+            {
+                return;
+            }
+
+            _shadow.enabled =
+                !IsCarried && !IsLoaded;
+
+            _shadow.transform.localScale =
+                _shadowRestScale
+                * Mathf.Lerp(
+                    1f,
+                    0.6f,
+                    Mathf.Clamp01(_height / 2f));
+        }
+
+        private void ResetVisualHeight()
+        {
+            if (_visual != null)
+            {
+                _visual.localPosition =
+                    _visualRestPosition;
             }
         }
 
-        // Sample the whole segment, including gaps between valid endpoints.
-        private Vector2 TraceGround(Vector2 start, Vector2 end)
+        // --------------------------------------------------------------------
+        // Helpers
+        // --------------------------------------------------------------------
+
+        public bool TransferTo(Transform destination)
         {
-            Vector3 origin = _groundTilemap.GetCellCenterWorld(Vector3Int.zero);
-            float cellWidth = Vector3.Distance(origin, _groundTilemap.GetCellCenterWorld(Vector3Int.right));
-            float cellHeight = Vector3.Distance(origin, _groundTilemap.GetCellCenterWorld(Vector3Int.up));
-            float step = Mathf.Max(0.001f, Mathf.Min(cellWidth, cellHeight) * 0.1f);
-            int steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(start, end) / step));
-            Vector2 valid = start;
-            for (int index = 1; index <= steps; index++)
+            if (!IsCarried
+                || destination == null
+                || destination.IsChildOf(transform))
             {
-                Vector2 point = Vector2.Lerp(start, end, (float)index / steps);
-                if (!_groundTilemap.HasTile(GroundCell(point))) break;
-                valid = point;
+                return false;
             }
-            return valid;
+
+            transform.SetParent(destination, true);
+            transform.localPosition = Vector3.zero;
+
+            return true;
         }
 
-        private void ConstrainToGround()
+        private void IgnoreThrowerCollisions(
+            Collider2D[] colliders)
         {
-            if (_groundTilemap == null) return;
-            Vector2 position = _rigidbody.position;
-            if (!_hasGroundPosition)
+            _ignoredColliders = colliders;
+
+            if (_ignoredColliders == null)
             {
-                if (!_groundTilemap.HasTile(GroundCell(position)))
+                return;
+            }
+
+            foreach (Collider2D other in _ignoredColliders)
+            {
+                if (other == null || other == _collider)
                 {
-                    float closest = float.PositiveInfinity;
-                    foreach (Vector3Int cell in _groundTilemap.cellBounds.allPositionsWithin)
-                    {
-                        if (!_groundTilemap.HasTile(cell)) continue;
-                        Vector2 center = _groundTilemap.GetCellCenterWorld(cell);
-                        float distance = (center - position).sqrMagnitude;
-                        if (distance >= closest) continue;
-                        closest = distance;
-                        _lastGroundPosition = center;
-                    }
-                    if (float.IsPositiveInfinity(closest)) { _rigidbody.linearVelocity = Vector2.zero; return; }
+                    continue;
                 }
-                else _lastGroundPosition = position;
-                _hasGroundPosition = true;
+
+                Physics2D.IgnoreCollision(
+                    _collider,
+                    other,
+                    true);
             }
-            Vector2 allowed = TraceGround(_lastGroundPosition, position);
-            if ((allowed - position).sqrMagnitude > 0.000001f) _rigidbody.position = allowed;
-            _lastGroundPosition = allowed;
-            Vector2 next = allowed + _rigidbody.linearVelocity * Time.fixedDeltaTime;
-            Vector2 bounded = TraceGround(allowed, next);
-            if ((bounded - next).sqrMagnitude > 0.000001f)
-                _rigidbody.linearVelocity = -_rigidbody.linearVelocity * Mathf.Clamp01(_wallRestitution);
-        }
-
-        private void SnapToTileCenter()
-        {
-            if (!_hasSnapTarget) TryChooseSnapTarget();
-            if (!_hasSnapTarget) return;
-
-            _snapTween = _rigidbody.DOMove(_snapTarget, Mathf.Max(0.01f, _snapFinishDuration))
-                .SetEase(Ease.OutCubic)
-                .SetUpdate(UpdateType.Fixed)
-                .OnComplete(() => _snapTween = null);
-        }
-
-        private void CancelSnap()
-        {
-            _snapTween?.Kill();
-            _snapTween = null;
-            _hasSnapTarget = false;
-            _hasGroundPosition = false;
-            _landingPath.Clear();
-            _landingPathIndex = 0;
-            _nextLandingSearchTime = 0f;
         }
 
         private void RestoreThrowerCollisions()
         {
-            if (_ignoredColliders == null) return;
+            if (_ignoredColliders == null)
+            {
+                return;
+            }
+
             foreach (Collider2D other in _ignoredColliders)
             {
-                if (other != null && _collider != null && other != _collider)
-                    Physics2D.IgnoreCollision(_collider, other, false);
+                if (other == null
+                    || _collider == null
+                    || other == _collider)
+                {
+                    continue;
+                }
+
+                Physics2D.IgnoreCollision(
+                    _collider,
+                    other,
+                    false);
             }
+
             _ignoredColliders = null;
         }
 
-        public bool TransferTo(Transform destination)
+        private void CancelSnap()
         {
-            if (!IsCarried || destination == null || destination.IsChildOf(transform)) return false;
-            transform.SetParent(destination, true);
-            transform.localPosition = Vector3.zero;
-            return true;
+            if (_snapTween != null)
+            {
+                _snapTween.Kill();
+                _snapTween = null;
+            }
+
+            _isSnapping = false;
+            _hasSnapTarget = false;
         }
 
-        public bool TryEnterCannon(Transform storagePoint)
+        private void NotifyStateChanged()
         {
-            if (!CanEnterCannon
-                || storagePoint == null || storagePoint.IsChildOf(transform)) return false;
-
-            GroundSortingRequested?.Invoke(this);
-            CancelSnap();
-            RestoreThrowerCollisions();
-            IsAirborne = false;
-            IsLoaded = true;
-            _height = 0f;
-            _verticalSpeed = 0f;
-            _rigidbody.linearVelocity = Vector2.zero;
-            _rigidbody.angularVelocity = 0f;
-            _rigidbody.simulated = false;
-            transform.SetParent(storagePoint, true);
-            transform.localPosition = Vector3.zero;
-            _visual.gameObject.SetActive(false);
-            if (_shadow != null) _shadow.enabled = false;
-            return true;
-        }
-
-        public void LaunchFromCannon(Vector3 muzzlePosition, Vector3 targetPosition,
-            CannonTrajectoryType trajectoryType = CannonTrajectoryType.Straight)
-        {
-            if (!IsLoaded) return;
-
-            CancelSnap();
-            transform.SetParent(_worldParent, true);
-            transform.position = muzzlePosition;
-            _rigidbody.position = muzzlePosition;
-            IsLoaded = false;
-            IsAirborne = true;
-            IsCannonFlight = true;
-            TrajectoryType = trajectoryType;
-            _cannonFlightTime = Mathf.Max(0.01f, _cannonFlightDuration);
-            _cannonStartPosition = muzzlePosition;
-            _cannonTargetPosition = targetPosition;
-            _height = 0f;
-            _verticalSpeed = 0f;
-            _rigidbody.bodyType = RigidbodyType2D.Kinematic;
-            _collider.isTrigger = true;
-            _collider.sharedMaterial = _originalMaterial;
-            _rigidbody.simulated = true;
-            _rigidbody.linearVelocity = Vector2.zero;
-            _visual.gameObject.SetActive(true);
-            UpdatePresentation();
-        }
-
-        public void ConsumeFromCannon()
-        {
-            if (!IsLoaded) return;
-            IsLoaded = false;
-            IsAirborne = false;
-            IsCannonFlight = false;
-            PooledObject handle = GetComponent<PooledObject>();
-            if (handle != null && handle.Owner != null) handle.Return();
-            else gameObject.SetActive(false);
-        }
-
-        public bool TryDispense(Tilemap groundTilemap, Vector2 direction, float speed)
-        {
-            if (_visual == null || _visual == transform || _flightMaterial == null) return false;
-            CancelSnap();
-            RestoreThrowerCollisions();
-            enabled = true;
-            _groundTilemap = groundTilemap;
-            _worldParent = transform.parent;
-            IsCarried = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
-            IsAirborne = true;
-            _height = 0f;
-            _verticalSpeed = _upwardSpeed;
-            _cannonFlightTime = 0f;
-            _rigidbody.position = transform.position;
-            _rigidbody.bodyType = RigidbodyType2D.Dynamic;
-            _rigidbody.linearDamping = 0f;
-            _rigidbody.angularVelocity = 0f;
-            _collider.isTrigger = true; // Detect intake overlaps without physical pushing.
-            _flightMaterial.bounciness = _wallRestitution;
-            _collider.sharedMaterial = _flightMaterial;
-            _rigidbody.simulated = true;
-            _rigidbody.linearVelocity = direction.normalized * Mathf.Max(0f, speed);
-            ConstrainToGround();
-            _visual.gameObject.SetActive(true);
-            UpdatePresentation();
-            return true;
-        }
-
-        private void OnCollisionEnter2D(Collision2D collision)
-        {
-            // Temporary PoC endpoint; damage and projectile cancellation come later.
-            if (IsCannonFlight) SettleOnGround();
+            StateChanged?.Invoke();
         }
 
         private void OnDisable()
         {
-            GroundSortingRequested?.Invoke(this);
-            ActiveItems.Remove(this);
             CancelSnap();
-            if (_rigidbody != null && !IsCarried && !IsLoaded) SettleOnGround();
+            RestoreThrowerCollisions();
         }
 
         private void OnDestroy()
         {
             CancelSnap();
             RestoreThrowerCollisions();
-            if (_flightMaterial != null) Destroy(_flightMaterial);
+
+            if (_flightMaterial != null)
+            {
+                Destroy(_flightMaterial);
+            }
         }
     }
 }

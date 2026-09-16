@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using DG.Tweening;
 using SiegeCore.Player;
-using SiegeCore.Projectile;
+using SiegeCore.Rat;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -10,13 +10,13 @@ namespace SiegeCore.Cannon
 {
     public sealed class Cannon : MonoBehaviour, IThrowable
     {
+        private static readonly HashSet<Cannon> ActiveCannons = new HashSet<Cannon>();
         [Header("References")]
         [SerializeField] private Transform _storagePoint;
         [SerializeField] private Transform _muzzle;
         [SerializeField] private Transform _visual;
         [SerializeField] private CannonSlot _sourceSlot;
         [SerializeField] private Tilemap _groundTilemap;
-        [SerializeField] private ProjectilePool _projectilePool;
 
         [Header("Loading")]
         [SerializeField, Min(1)] private int _maxLoadCount = 3;
@@ -26,7 +26,6 @@ namespace SiegeCore.Cannon
         [SerializeField, Min(0.01f)] private float _fireInterval = 0.4f;
         [SerializeField, Min(0.01f)] private float _projectileFlightDuration = 3f;
         [SerializeField, Min(0f)] private float _projectileArcHeight = 2f;
-        [SerializeField, Min(0f)] private float _projectileDamage = 10f;
 
         [Header("Carry")]
         [SerializeField] private Vector3 _carriedScale = Vector3.one;
@@ -51,6 +50,7 @@ namespace SiegeCore.Cannon
         private PhysicsMaterial2D _throwMaterial;
         private PhysicsMaterial2D _originalMaterial;
         private Collider2D[] _ignoredColliders;
+        private CannonSlot _pendingInstallSlot;
         private bool _isThrown;
         private bool _isSettling;
         private float _height;
@@ -58,9 +58,12 @@ namespace SiegeCore.Cannon
 
         public CannonState State { get; private set; } = CannonState.Placed;
         public event System.Action<IThrowable> GroundSortingRequested;
-        public Transform CarryTransform => transform;
-        public bool IsCarried => State == CannonState.Carried;
-        public bool CanBePickedUp => State != CannonState.Carried && !_isThrown && !_isSettling && isActiveAndEnabled;
+        public Transform CarryTransform { get { return transform; } }
+        public bool IsCarried { get { return State == CannonState.Carried; } }
+        public bool CanBePickedUp
+        {
+            get { return State != CannonState.Carried && !_isThrown && !_isSettling && isActiveAndEnabled; }
+        }
         public int LoadedCount
         {
             get
@@ -69,7 +72,28 @@ namespace SiegeCore.Cannon
                 return _loadedObjects.Count;
             }
         }
-        public bool IsFull => LoadedCount >= Mathf.Max(1, _maxLoadCount);
+        public bool IsFull { get { return LoadedCount >= Mathf.Max(1, _maxLoadCount); } }
+        public CannonSlot SourceSlot { get { return _sourceSlot; } }
+        public CannonTrajectoryType TrajectoryType { get { return _trajectoryType; } }
+        public float ProjectileFlightDuration { get { return _projectileFlightDuration; } }
+        public float ProjectileArcHeight { get { return _projectileArcHeight; } }
+
+        public bool IsInstalledFor(VehicleSide side)
+        {
+            return State == CannonState.Installed
+                && _sourceSlot != null
+                && _sourceSlot.VehicleSide == side;
+        }
+
+        public Vector3 GetLoadingPosition()
+        {
+            if (_storagePoint != null)
+            {
+                return _storagePoint.position;
+            }
+
+            return transform.position;
+        }
 
         private void Awake()
         {
@@ -116,11 +140,13 @@ namespace SiegeCore.Cannon
 
         private void OnEnable()
         {
+            ActiveCannons.Add(this);
             if (State == CannonState.Installed) StartFiringIfNeeded();
         }
 
         private void OnDisable()
         {
+            ActiveCannons.Remove(this);
             GroundSortingRequested?.Invoke(this);
             if (_fireRoutine != null) StopCoroutine(_fireRoutine);
             _fireRoutine = null;
@@ -200,21 +226,39 @@ namespace SiegeCore.Cannon
                     Debug.LogError("[Cannon] Cannot fire without a muzzle, source slot and target slot.", this);
                     continue;
                 }
-                if (!_sourceSlot.TargetSlot.TryGetWorldPosition(out Vector3 targetPosition))
+                if (!TryGetShotTarget(out Vector3 targetPosition))
                 {
-                    Debug.LogError("[Cannon] Target Slot must contain at least one tile.", this);
+                    Debug.LogError("[Cannon] Target cannon or Target Slot must provide a fire position.", this);
                     continue;
                 }
-                if (_projectilePool == null || !_projectilePool.TrySpawn(_muzzle.position, targetPosition, _sourceSlot.VehicleSide,
-                        _trajectoryType, _projectileFlightDuration, _projectileArcHeight, _projectileDamage))
+                CarryableObject loadedObject = _loadedObjects.Peek();
+                RatAgent rat = loadedObject.GetComponent<RatAgent>();
+                if (rat == null)
                 {
-                    Debug.LogError("[Cannon] Projectile Pool is not ready.", this);
+                    Debug.LogError("[Cannon] Only Rat ammunition can be fired.", loadedObject);
+                    _loadedObjects.Dequeue();
+                    loadedObject.Drop(_storagePoint.position);
                     continue;
                 }
-                CarryableObject item = _loadedObjects.Dequeue();
-                item.ConsumeFromCannon();
+
+                _loadedObjects.Dequeue();
+                rat.LaunchFromCannon(_muzzle.position, targetPosition, _sourceSlot.VehicleSide,
+                    _trajectoryType, _projectileFlightDuration, _projectileArcHeight);
             }
             _fireRoutine = null;
+        }
+
+        private bool TryGetShotTarget(out Vector3 targetPosition)
+        {
+            foreach (Cannon candidate in ActiveCannons)
+            {
+                if (candidate == null || candidate == this || candidate.State != CannonState.Installed) continue;
+                if (candidate._sourceSlot != _sourceSlot.TargetSlot || candidate._muzzle == null) continue;
+                targetPosition = candidate._muzzle.position;
+                return true;
+            }
+
+            return _sourceSlot.TargetSlot.TryGetWorldPosition(out targetPosition);
         }
 
         private void RemoveMissingObjects()
@@ -341,7 +385,7 @@ namespace SiegeCore.Cannon
             Vector3 targetPosition = _groundTilemap.GetCellCenterWorld(cellPosition);
             _isSettling = true;
             _carryTween = transform.DOMove(targetPosition, Mathf.Max(0.01f, _carryTweenDuration))
-                .OnComplete(() => _isSettling = false);
+                .OnComplete(FinishGroundSettling);
         }
 
         private bool BeginInstallFromThrow(CannonSlot slot)
@@ -358,14 +402,28 @@ namespace SiegeCore.Cannon
 
             Vector3 rootOffset = transform.position - _storagePoint.position;
             Vector3 targetPosition = slotPosition + rootOffset;
+            _pendingInstallSlot = slot;
             _isSettling = true;
             _carryTween = transform.DOMove(targetPosition, Mathf.Max(0.01f, _carryTweenDuration))
-                .OnComplete(() =>
-                {
-                    _isSettling = false;
-                    SetInstalled(slot);
-                });
+                .OnComplete(FinishThrownInstallation);
             return true;
+        }
+
+        private void FinishGroundSettling()
+        {
+            _isSettling = false;
+        }
+
+        private void FinishThrownInstallation()
+        {
+            _isSettling = false;
+            CannonSlot slot = _pendingInstallSlot;
+            _pendingInstallSlot = null;
+
+            if (slot != null)
+            {
+                SetInstalled(slot);
+            }
         }
 
         private void StopFiring()
