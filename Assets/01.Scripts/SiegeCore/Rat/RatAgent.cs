@@ -58,6 +58,7 @@ namespace SiegeCore.Rat
 
         // ���� Projectile���� ���.
         public VehicleSide AttackSide { get; private set; }
+        public CannonSlot ProjectileSourceSlot { get; private set; }
 
         public float Health { get; private set; }
 
@@ -544,6 +545,7 @@ namespace SiegeCore.Rat
             Vector3 startPosition,
             Vector3 targetPosition,
             VehicleSide attackSide,
+            CannonSlot sourceSlot,
             CannonTrajectoryType trajectoryType,
             float flightDuration,
             float arcHeight)
@@ -555,6 +557,7 @@ namespace SiegeCore.Rat
             }
 
             AttackSide = attackSide;
+            ProjectileSourceSlot = sourceSlot;
             _groggyUntil = 0f;
 
             _suppressCarryEvent = true;

@@ -21,6 +21,11 @@ namespace SiegeCore.Projectile
             get { return _agent.AttackSide; }
         }
 
+        public CannonSlot SourceSlot
+        {
+            get { return _agent.ProjectileSourceSlot; }
+        }
+
         public float Height
         {
             get { return _carryable.Height; }
@@ -132,6 +137,14 @@ namespace SiegeCore.Projectile
             }
 
             if (other.Side == Side)
+            {
+                return;
+            }
+
+            if (SourceSlot == null
+                || other.SourceSlot == null
+                || SourceSlot.TargetSlot != other.SourceSlot
+                || other.SourceSlot.TargetSlot != SourceSlot)
             {
                 return;
             }

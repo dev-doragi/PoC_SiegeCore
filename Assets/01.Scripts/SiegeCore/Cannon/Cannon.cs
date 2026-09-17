@@ -243,6 +243,7 @@ namespace SiegeCore.Cannon
 
                 _loadedObjects.Dequeue();
                 rat.LaunchFromCannon(_muzzle.position, targetPosition, _sourceSlot.VehicleSide,
+                    _sourceSlot,
                     _trajectoryType, _projectileFlightDuration, _projectileArcHeight);
             }
             _fireRoutine = null;

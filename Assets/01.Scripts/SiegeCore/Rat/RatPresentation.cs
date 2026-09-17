@@ -39,6 +39,7 @@ namespace SiegeCore.Rat
 
         private Vector3 _baseScale;
         private Vector3 _basePosition;
+        private int _groundSortingOrder;
 
         private float _animationSeed;
         private Tween _deathTween;
@@ -57,6 +58,7 @@ namespace SiegeCore.Rat
 
             _baseScale = _renderer.transform.localScale;
             _basePosition = _renderer.transform.localPosition;
+            _groundSortingOrder = _renderer.sortingOrder;
             _animationSeed = Random.Range(0f, Mathf.PI * 2f);
         }
 
@@ -136,6 +138,7 @@ namespace SiegeCore.Rat
             }
 
             ApplyFactionColor();
+            ApplyProjectileSorting(state);
 
             switch (state)
             {
@@ -159,6 +162,44 @@ namespace SiegeCore.Rat
 
             _agent.Carryable.RefreshShadowSprite();
             ResetMotionVisual();
+        }
+
+        private void ApplyProjectileSorting(RatState state)
+        {
+            if (state != RatState.CannonFlight)
+            {
+                _renderer.sortingOrder = _groundSortingOrder;
+                return;
+            }
+
+            int group = GetSortingGroup(_agent.ProjectileSourceSlot);
+
+            if (_agent.AttackSide == Cannon.VehicleSide.Enemy)
+            {
+                group = 2 - group;
+            }
+
+            _renderer.sortingOrder = group * 100;
+        }
+
+        private static int GetSortingGroup(Cannon.CannonSlot sourceSlot)
+        {
+            if (sourceSlot == null)
+            {
+                return 1;
+            }
+
+            if (sourceSlot.SlotType == Cannon.CannonSlotType.Left)
+            {
+                return 0;
+            }
+
+            if (sourceSlot.SlotType == Cannon.CannonSlotType.Right)
+            {
+                return 2;
+            }
+
+            return 1;
         }
 
         private void ApplyFactionColor()
