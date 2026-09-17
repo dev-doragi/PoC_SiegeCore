@@ -151,6 +151,12 @@ namespace SiegeCore.Rat
 
         private void BeginStage()
         {
+            PlayerAttackController attack = GetComponent<PlayerAttackController>();
+            if (attack != null)
+            {
+                attack.CancelCharge();
+            }
+
             Component upperComponent =
                 _carry.GetHeld(
                     _carry.HeldCount - 1) as Component;

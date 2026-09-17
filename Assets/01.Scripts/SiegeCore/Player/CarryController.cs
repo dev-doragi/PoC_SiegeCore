@@ -1,18 +1,50 @@
 using System.Collections.Generic;
+using SiegeCore.Rat;
 using UnityEngine;
 
 namespace SiegeCore.Player
 {
+    [DefaultExecutionOrder(-50)]
     [RequireComponent(typeof(PlayerAimController))]
     public sealed class CarryController : MonoBehaviour
     {
-        [SerializeField] private Transform _holdPoint;
-        [SerializeField, Range(1, 3)] private int _maxCarryCount = 3;
-        [SerializeField] private Transform[] _holdPoints;
-        [SerializeField, Min(0.1f)] private float _pickupRadius = 1.5f;
+        [Header("Carry Slots")]
+        [SerializeField, Tooltip("단일 슬롯 구성을 위한 이전 HoldPoint입니다. Hold Points가 비어 있을 때만 사용합니다.")]
+        private Transform _holdPoint;
+
+        [SerializeField, Min(1), Tooltip("최대 운반 수입니다. 실제 용량은 HoldPoint 개수를 넘지 않습니다.")]
+        private int _maxCarryCount = 3;
+
+        [SerializeField, Tooltip("아래에서 위 순서로 사용할 머리 위 운반 위치입니다.")]
+        private Transform[] _holdPoints = new Transform[0];
+
+        [SerializeField] private CarryStackAnimator _stackAnimator;
+
+        [Header("Airborne Catch")]
+        [SerializeField, Min(0.1f), Tooltip("지상 Rat을 직접 줍는 반경입니다.")]
+        private float _pickupRadius = 0.55f;
+
+        [SerializeField, Min(0.1f), Tooltip("다음 슬롯 높이를 통과할 때 허용하는 지상 평면 오차입니다.")]
+        private float _airborneCatchRadius = 0.5f;
+
+        [SerializeField, Min(0f), Tooltip("공중 Rat을 머리에 받는 순간 플레이어 이동을 잠그는 시간입니다.")]
+        private float _catchMovementLockDuration = 0.1f;
+
+        [SerializeField, Min(0.1f)] private float _catchAssistRadius = 0.85f;
+        [SerializeField, Min(0.1f)] private float _catchAssistHeight = 1.2f;
+        [SerializeField, Min(0.01f)] private float _catchAssistDuration = 0.2f;
+        [SerializeField, Min(0f)] private float _catchAssistSpeed = 4f;
+        [SerializeField, Min(0f)] private float _catchAssistAcceleration = 40f;
         [SerializeField] private LayerMask _pickupLayers = ~0;
         [SerializeField] private LayerMask _obstacleLayers = ~0;
         [SerializeField, Min(0.01f)] private float _throwMovementLockDuration = 0.2f;
+
+        [Header("Enemy Recovery")]
+        [SerializeField, Min(0f), Tooltip("운반 중 적이 깨어났을 때 플레이어가 밀려나는 속도입니다.")]
+        private float _recoveryKnockbackSpeed = 6f;
+
+        [SerializeField, Min(0f), Tooltip("적이 깨어난 뒤 이동 입력을 막는 시간입니다.")]
+        private float _recoveryKnockbackDuration = 0.25f;
 
         private PlayerAimController _aimController;
         private PlayerController _player;
@@ -20,7 +52,12 @@ namespace SiegeCore.Player
         private Vector3 _holdOffset;
         private readonly List<ICarryable> _heldObjects = new List<ICarryable>();
         private readonly Dictionary<ICarryable, CarrySorting> _carrySorting = new Dictionary<ICarryable, CarrySorting>();
+        private CarryableObject _catchCandidate;
+        private Transform _reservedPoint;
+        private int _reservedCount;
+        private readonly HashSet<CarryableObject> _catchBlockedUntilExit = new HashSet<CarryableObject>();
         private int _carriedLayerId;
+        private bool _handlingEnemyRecovery;
 
         private sealed class CarrySorting
         {
@@ -67,6 +104,7 @@ namespace SiegeCore.Player
         private void Awake()
         {
             _player = GetComponent<PlayerController>();
+            if (_stackAnimator == null) _stackAnimator = GetComponentInChildren<CarryStackAnimator>();
             _carriedLayerId = SortingLayer.NameToID("Carried");
             _aimController = GetComponent<PlayerAimController>();
             _playerColliders = GetComponentsInChildren<Collider2D>();
@@ -81,7 +119,6 @@ namespace SiegeCore.Player
 
         private void OnEnable()
         {
-            EventBus.Instance.Subscribe<PrimaryActionInputEvent>(HandlePrimaryAction);
             EventBus.Instance.Subscribe<SecondaryActionInputEvent>(HandleSecondaryAction);
         }
 
@@ -89,16 +126,10 @@ namespace SiegeCore.Player
         {
             if (EventBus.Instance != null)
             {
-                EventBus.Instance.Unsubscribe<PrimaryActionInputEvent>(HandlePrimaryAction);
                 EventBus.Instance.Unsubscribe<SecondaryActionInputEvent>(HandleSecondaryAction);
             }
-            for (int index = _heldObjects.Count - 1; index >= 0; index--)
-            {
-                ICarryable item = _heldObjects[index];
-                RestoreCarrySorting(item);
-                if (item is Component component && component != null && item.IsCarried) item.Drop(transform.position);
-            }
-            _heldObjects.Clear();
+            DropAll();
+            _catchBlockedUntilExit.Clear();
             // Also restore objects still in their initial airborne arc.
             List<ICarryable> pending = new List<ICarryable>(_carrySorting.Keys);
             foreach (ICarryable item in pending) RestoreCarrySorting(item);
@@ -107,28 +138,200 @@ namespace SiegeCore.Player
         private void LateUpdate()
         {
             PruneHeldObjects();
+
             Vector3 offset = _holdOffset;
             if (_aimController == null || _holdPoint == null || (_holdPoints != null && _holdPoints.Length > 0)) return;
             offset.x = Mathf.Abs(offset.x) * _aimController.FacingSign;
             _holdPoint.localPosition = offset;
         }
 
-        private void HandlePrimaryAction(PrimaryActionInputEvent inputEvent)
-        {
-            if (!inputEvent.IsPressed || Time.timeScale <= 0f) return;
-            TryPickUpNearest();
-        }
-
         private void HandleSecondaryAction(SecondaryActionInputEvent inputEvent)
         {
-            if (inputEvent.IsPressed && Time.timeScale > 0f) TryThrow();
+            if (!inputEvent.IsPressed || Time.timeScale <= 0f)
+            {
+                return;
+            }
+
+            PlayerAttackController attack = GetComponent<PlayerAttackController>();
+            if (attack != null)
+            {
+                attack.CancelCharge();
+            }
+
+            TryThrow();
+        }
+
+        private void FixedUpdate()
+        {
+            _catchBlockedUntilExit.RemoveWhere(item => item == null || !item.IsAirborne);
+            if (Time.timeScale <= 0f) return;
+            int count = HeldCount;
+            Transform point = GetHoldPoint(count);
+            if (InteractionLocked || count >= GetCarryCapacity() || point == null
+                || (count > 0 && _heldObjects[0] is SiegeCore.Cannon.Cannon))
+            {
+                CancelCatchReservation();
+                return;
+            }
+
+            if (_catchCandidate != null)
+            {
+                if (IsCatchReservationValid(_catchCandidate, _reservedPoint)
+                    && _catchCandidate.HasCatchAssist(this)) return;
+                CancelCatchReservation();
+            }
+
+            CarryableObject best = null;
+            float bestDistance = float.PositiveInfinity;
+            Vector2 groundTarget = GetCatchGroundPosition(point);
+            foreach (RatAgent rat in RatAgent.Active)
+            {
+                if (rat == null) continue;
+                CarryableObject item = rat.Carryable;
+                float distance = Vector2.Distance(item.PhysicsPosition, groundTarget);
+                if (_catchBlockedUntilExit.Contains(item))
+                {
+                    if (distance > Mathf.Max(_catchAssistRadius, _airborneCatchRadius)
+                        || item.PhysicsPosition.y + item.Height > point.position.y + _catchAssistHeight)
+                        _catchBlockedUntilExit.Remove(item);
+                    continue;
+                }
+                if (!rat.CanBeCaught || item.IsCatchAssisted) continue;
+                float gap = item.PhysicsPosition.y + item.Height - point.position.y;
+                if (gap < 0f || gap > _catchAssistHeight
+                    || item.GetTimeToCatchPoint(point) > _catchAssistDuration) continue;
+                float radius = Mathf.Lerp(_airborneCatchRadius,
+                    Mathf.Max(_airborneCatchRadius, _catchAssistRadius), gap / _catchAssistHeight);
+                if (distance > radius || distance >= bestDistance) continue;
+                best = item;
+                bestDistance = distance;
+            }
+            if (best == null) return;
+            _catchCandidate = best;
+            _reservedPoint = point;
+            _reservedCount = count;
+            best.BeginCatchAssist(this, point, _catchAssistSpeed, _catchAssistAcceleration);
+        }
+
+        internal Vector2 GetCatchGroundPosition(Transform point)
+        {
+            return new Vector2(point.position.x, transform.position.y);
+        }
+
+        internal bool IsCatchReservationValid(CarryableObject item, Transform point)
+        {
+            return isActiveAndEnabled && !InteractionLocked && item != null && item.isActiveAndEnabled
+                && item == _catchCandidate && point != null && point == _reservedPoint
+                && HeldCount == _reservedCount && HeldCount < GetCarryCapacity()
+                && GetHoldPoint(HeldCount) == point
+                && Vector2.Distance(item.PhysicsPosition, GetCatchGroundPosition(point))
+                    <= Mathf.Max(_airborneCatchRadius, _catchAssistRadius);
+        }
+
+        internal bool TryCompleteCatch(CarryableObject item, Transform point, Vector2 contactGroundPosition)
+        {
+            if (!IsCatchReservationValid(item, point)
+                || Vector2.Distance(contactGroundPosition, GetCatchGroundPosition(point)) > _airborneCatchRadius
+                || !item.TryCatch(point)) return false;
+            _catchCandidate = null;
+            _reservedPoint = null;
+            _heldObjects.Add(item);
+            CaptureCarrySorting(item);
+            RefreshCarrySorting();
+            if (_stackAnimator != null) _stackAnimator.PlayCatchLanding(item);
+            if (_player != null && _catchMovementLockDuration > 0f)
+                _player.StopMovementFor(_catchMovementLockDuration);
+            return true;
+        }
+
+        private void CancelCatchReservation()
+        {
+            if (_catchCandidate != null) _catchCandidate.CancelCatchAssist(this);
+            _catchCandidate = null;
+            _reservedPoint = null;
+        }
+
+        private int GetCarryCapacity()
+        {
+            return Mathf.Min(Mathf.Max(1, _maxCarryCount), HoldPointCount);
+        }
+
+        /// <summary>
+        /// 운반 중인 적이 회복했을 때 한 번만 전체 Drop과 플레이어 반동을 발생시킨다.
+        /// </summary>
+        public void HandleCarriedEnemyRecovered(RatAgent recoveredEnemy)
+        {
+            if (_handlingEnemyRecovery || recoveredEnemy == null)
+            {
+                return;
+            }
+
+            _handlingEnemyRecovery = true;
+
+            RatStacking stacking = GetComponent<RatStacking>();
+            if (stacking != null)
+            {
+                stacking.Cancel();
+            }
+
+            PlayerAttackController attack = GetComponent<PlayerAttackController>();
+            if (attack != null)
+            {
+                attack.CancelCharge();
+            }
+
+            DropAll();
+
+            if (_player != null)
+            {
+                int facing = 1;
+                if (_aimController != null)
+                {
+                    facing = _aimController.FacingSign;
+                }
+
+                Vector2 knockbackDirection = Vector2.left * facing;
+                _player.ApplyKnockback(
+                    knockbackDirection,
+                    _recoveryKnockbackSpeed,
+                    _recoveryKnockbackDuration);
+            }
+
+            _handlingEnemyRecovery = false;
+        }
+
+        public void DropAll()
+        {
+            CancelCatchReservation();
+            for (int index = _heldObjects.Count - 1; index >= 0; index--)
+            {
+                ICarryable item = _heldObjects[index];
+                RestoreCarrySorting(item);
+
+                Component component = item as Component;
+                RatAgent rat = null;
+                if (component != null)
+                {
+                    rat = component.GetComponent<RatAgent>();
+                }
+                if (rat != null)
+                {
+                    rat.DropFromCarry(transform.position);
+                }
+                else if (item.IsCarried)
+                {
+                    item.Drop(transform.position);
+                }
+            }
+
+            _heldObjects.Clear();
         }
 
         public bool TryPickUpNearest()
         {
             if (InteractionLocked) { return false; }
             int count = HeldCount;
-            if (count >= Mathf.Clamp(_maxCarryCount, 1, 3) || GetHoldPoint(count) == null) return false;
+            if (count >= GetCarryCapacity() || GetHoldPoint(count) == null) return false;
             if (count > 0 && _heldObjects[0] is SiegeCore.Cannon.Cannon) return false;
 
             Collider2D[] nearby = Physics2D.OverlapCircleAll(transform.position, _pickupRadius, _pickupLayers);
@@ -190,6 +393,11 @@ namespace SiegeCore.Player
             if (throwable != null)
             {
                 if (_aimController == null || !throwable.TryThrow(_aimController.AimDirection, groundPosition, _playerColliders)) return false;
+                CarryableObject thrownCarryable = throwable as CarryableObject;
+                if (thrownCarryable != null)
+                {
+                    _catchBlockedUntilExit.Add(thrownCarryable);
+                }
             }
             else heldObject.Drop(groundPosition);
             if (_player != null) _player.StopMovementFor(Mathf.Max(0.01f, _throwMovementLockDuration));
@@ -243,6 +451,12 @@ namespace SiegeCore.Player
 
         private void CaptureCarrySorting(ICarryable item)
         {
+            // Throw 직후 다시 받은 Rat은 기존 정렬 캐시와 이벤트 구독을 그대로 사용한다.
+            if (_carrySorting.ContainsKey(item))
+            {
+                return;
+            }
+
             // Cache once on pickup, including temporarily hidden visuals and shadows.
             Renderer[] renderers = item.CarryTransform.GetComponentsInChildren<Renderer>(true);
             CarrySorting sorting = new CarrySorting
@@ -307,6 +521,23 @@ namespace SiegeCore.Player
         {
             Gizmos.color = Color.yellow;
             Gizmos.DrawWireSphere(transform.position, _pickupRadius);
+
+            Transform catchPoint = GetHoldPoint(Application.isPlaying ? HeldCount : 0);
+            if (catchPoint != null)
+            {
+                Gizmos.color = Color.cyan;
+                Gizmos.DrawWireSphere(
+                    catchPoint.position,
+                    Mathf.Max(0.1f, _airborneCatchRadius));
+                Vector3 funnelTop = catchPoint.position + Vector3.up * _catchAssistHeight;
+                float assistRadius = Mathf.Max(_airborneCatchRadius, _catchAssistRadius);
+                Gizmos.color = Color.green;
+                Gizmos.DrawWireSphere(funnelTop, assistRadius);
+                Gizmos.DrawLine(catchPoint.position + Vector3.left * _airborneCatchRadius,
+                    funnelTop + Vector3.left * assistRadius);
+                Gizmos.DrawLine(catchPoint.position + Vector3.right * _airborneCatchRadius,
+                    funnelTop + Vector3.right * assistRadius);
+            }
         }
     }
 }

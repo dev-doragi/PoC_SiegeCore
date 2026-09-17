@@ -21,6 +21,23 @@ namespace SiegeCore.Player
         [SerializeField, Min(0f)] private float _impulsePropagationDelay = 0.06f;
         [SerializeField, Min(0.01f)] private float _impulseDamping = 8f;
 
+        [Header("Stack Landing")]
+        [SerializeField, Min(0f)] private float _catchStackCompression = 0.08f;
+        [SerializeField, Min(0.01f)] private float _catchStackRecoveryDuration = 0.12f;
+        [SerializeField, Min(0f)] private float _catchPropagationDelay = 0.025f;
+        [SerializeField, Range(0.5f, 1f)] private float _catchSquashRatio = 0.7f;
+        [SerializeField, Min(1f)] private float _catchSquashWidth = 1.12f;
+
+        private sealed class Landing
+        {
+            public CarryableObject Item;
+            public Transform Visual;
+            public Vector3 RestScale;
+            public Tween Tween;
+            public System.Action StateChanged;
+        }
+        private readonly List<Landing> _landings = new List<Landing>();
+
         private sealed class Slot
         {
             public Transform Point;
@@ -29,6 +46,8 @@ namespace SiegeCore.Player
             public float Kick;
             public float Bob;
             public float Lift;
+            public float Compression;
+            public Tween CompressionTween;
             public float KickSourceVelocity;
             public Tween SwayTween;
             public Tween KickTween;
@@ -88,6 +107,12 @@ namespace SiegeCore.Player
 
         private void LateUpdate()
         {
+            for (int index = _landings.Count - 1; index >= 0; index--)
+            {
+                Landing landing = _landings[index];
+                if (landing.Item == null || !landing.Item.isActiveAndEnabled || !landing.Item.IsCarried)
+                    StopLanding(landing);
+            }
             if (Time.deltaTime <= 0f) return;
             bool refresh = _refreshRequested;
             _refreshRequested = false;
@@ -154,7 +179,7 @@ namespace SiegeCore.Player
                 if (slot.Point == null) continue;
                 Vector3 position = slot.Rest;
                 position.x += slot.X + slot.Kick;
-                position.y += slot.Bob + slot.Lift;
+                position.y += slot.Bob + slot.Lift + slot.Compression;
                 slot.Point.localPosition = position;
             }
             if (moving) _lastMoveDirection = velocity.normalized;
@@ -165,6 +190,53 @@ namespace SiegeCore.Player
             _moving = moving;
         }
 
+        public void PlayCatchLanding(CarryableObject item)
+        {
+            if (!isActiveAndEnabled || item == null || item.CarryVisual == null) return;
+            Landing landing = new Landing
+            {
+                Item = item,
+                Visual = item.CarryVisual,
+                RestScale = item.CarryVisualRestScale
+            };
+            landing.StateChanged = () => StopLanding(landing);
+            item.StateChanged += landing.StateChanged;
+            _landings.Add(landing);
+            Vector3 squash = landing.RestScale;
+            squash.x *= _catchSquashWidth;
+            squash.y *= _catchSquashRatio;
+            Sequence sequence = DOTween.Sequence();
+            sequence.Append(landing.Visual.DOScale(squash, 0.05f).SetEase(Ease.OutQuad));
+            sequence.Append(landing.Visual.DOScale(landing.RestScale,
+                _catchStackRecoveryDuration).SetEase(Ease.OutBack));
+            sequence.OnComplete(() => StopLanding(landing));
+            landing.Tween = sequence;
+
+            int top = _carryController.HeldCount - 1;
+            for (int index = top; index >= 0; index--)
+            {
+                if (index >= _slots.Count) continue;
+                Slot slot = _slots[index];
+                slot.CompressionTween?.Kill();
+                int depth = top - index;
+                float amount = _catchStackCompression / (depth + 1f);
+                Sequence compression = DOTween.Sequence();
+                compression.AppendInterval(depth * _catchPropagationDelay);
+                compression.Append(DOTween.To(() => slot.Compression, value => slot.Compression = value,
+                    -amount, 0.05f).SetEase(Ease.OutQuad));
+                compression.Append(DOTween.To(() => slot.Compression, value => slot.Compression = value,
+                    0f, _catchStackRecoveryDuration).SetEase(Ease.OutBack));
+                slot.CompressionTween = compression;
+            }
+        }
+
+        private void StopLanding(Landing landing)
+        {
+            landing.Tween?.Kill();
+            if (landing.Item != null) landing.Item.StateChanged -= landing.StateChanged;
+            if (landing.Visual != null) landing.Visual.localScale = landing.RestScale;
+            _landings.Remove(landing);
+        }
         private void SetBobbing(Slot slot, int index)
         {
             slot.BobTween?.Kill();
@@ -189,8 +261,12 @@ namespace SiegeCore.Player
 
         private void OnDisable()
         {
+            while (_landings.Count > 0) StopLanding(_landings[_landings.Count - 1]);
             foreach (Slot slot in _slots)
             {
+                slot.CompressionTween?.Kill();
+                slot.CompressionTween = null;
+                slot.Compression = 0f;
                 slot.SwayTween?.Kill();
                 slot.KickTween?.Kill();
                 slot.BobTween?.Kill();

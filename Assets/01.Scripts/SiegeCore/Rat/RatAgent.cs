@@ -72,6 +72,37 @@ namespace SiegeCore.Rat
             get { return _state == RatState.GroundCombat; }
         }
 
+        /// <summary>지상 행동 중이거나 빠따 비행 중인 Rat을 타격할 수 있다.</summary>
+        public bool CanBeHitByBat
+        {
+            get
+            {
+                return _state == RatState.Idle
+                    || _state == RatState.GroundCombat
+                    || _state == RatState.Groggy
+                    || _state == RatState.Airborne;
+            }
+        }
+
+        /// <summary>적 Rat은 빠따로 부여된 제압 시간이 남은 공중 상태에서만 받을 수 있다.</summary>
+        public bool CanBeCaught
+        {
+            get
+            {
+                if (_state != RatState.Airborne || !_carryable.CanBeCaughtInFlight)
+                {
+                    return false;
+                }
+
+                if (Faction == VehicleSide.Ally)
+                {
+                    return true;
+                }
+
+                return _groggyUntil > Time.time;
+            }
+        }
+
         public bool CanPickUp
         {
             get
@@ -259,6 +290,13 @@ namespace SiegeCore.Rat
         {
             if (_state == RatState.Carried)
             {
+                if (Faction == VehicleSide.Enemy)
+                {
+                    // 적의 제압 시간은 운반과 재투척으로 갱신하지 않는다.
+                    BeginAirborne(_groundReturnState, 0f);
+                    return;
+                }
+
                 BeginAirborne(
                     _groundReturnState,
                     GetGroggyDuration());
@@ -312,6 +350,13 @@ namespace SiegeCore.Rat
         {
             RatState destination =
                 NormalizeGroundState(_landingState);
+
+            if (Faction == VehicleSide.Enemy && _groggyUntil > Time.time)
+            {
+                float remainingDuration = _groggyUntil - Time.time;
+                EnterGroggy(destination, remainingDuration);
+                return;
+            }
 
             if (_landingGroggyDuration > 0f)
             {
@@ -371,7 +416,107 @@ namespace SiegeCore.Rat
             }
         }
 
-        // ���� RatMelee ȣȯ��.
+        /// <summary>
+        /// 빠따 전용 발사 진입점이다. 적의 제압 시간은 착지가 아닌 타격 순간부터 흐른다.
+        /// </summary>
+        public bool LaunchFromBat(
+            Vector2 direction,
+            float horizontalSpeed,
+            float verticalSpeed,
+            float catchLockDuration,
+            float collisionFusionMinimumSpeed,
+            int swingId,
+            bool isFullCharge,
+            Transform returnTarget)
+        {
+            if (!CanBeHitByBat || _factory == null || direction.sqrMagnitude < 0.0001f)
+            {
+                return false;
+            }
+
+            RatState returnState = NormalizeGroundState(_state);
+            if (_state == RatState.Groggy)
+            {
+                returnState = _groundReturnState;
+            }
+            else if (_state == RatState.Airborne)
+            {
+                // 공중에서 다시 맞아도 최초 비행이 끝난 뒤 돌아갈 지상 상태는 유지한다.
+                returnState = NormalizeGroundState(_landingState);
+            }
+
+            _landingState = returnState;
+            _landingGroggyDuration = 0f;
+
+            if (Faction == VehicleSide.Enemy)
+            {
+                _groggyUntil = Time.time + Mathf.Max(0f, _enemyGroggyDuration);
+            }
+            else
+            {
+                _groggyUntil = 0f;
+            }
+
+            ChangeState(RatState.Airborne);
+
+            bool launched = _carryable.TryBatLaunch(
+                _factory.Battlefield.Ground,
+                direction.normalized,
+                horizontalSpeed,
+                verticalSpeed,
+                catchLockDuration,
+                collisionFusionMinimumSpeed,
+                swingId,
+                isFullCharge,
+                returnTarget);
+
+            if (launched)
+            {
+                return true;
+            }
+
+            _groggyUntil = 0f;
+            ChangeState(returnState);
+            return false;
+        }
+
+        /// <summary>충돌 합성 결과를 원본 비행 속도와 높이로 이어서 날린다.</summary>
+        public void ContinueAfterCollisionFusion(
+            Vector3 groundPosition,
+            float height,
+            float verticalSpeed,
+            Vector2 velocity,
+            float catchAllowedAt,
+            int swingId,
+            float collisionFusionMinimumSpeed,
+            Transform returnTarget)
+        {
+            if (_factory == null || _state == RatState.Dead)
+            {
+                return;
+            }
+
+            _groundReturnState = RatState.Idle;
+            _landingState = RatState.Idle;
+            _landingGroggyDuration = 0f;
+            _groggyUntil = 0f;
+            ChangeState(RatState.Airborne);
+
+            _suppressCarryEvent = true;
+            _carryable.BeginCollisionFusionFlight(
+                _factory.Battlefield.Ground,
+                groundPosition,
+                height,
+                verticalSpeed,
+                velocity,
+                catchAllowedAt,
+                swingId,
+                collisionFusionMinimumSpeed,
+                returnTarget);
+            _suppressCarryEvent = false;
+        }
+
+        // 이전 RatMelee 호출과의 호환 진입점.
         public void Stun(Vector2 direction)
         {
             KnockbackToGroggy(direction);
@@ -421,20 +566,20 @@ namespace SiegeCore.Rat
                 return;
             }
 
-            // ���� ��� �ִٰ� Groggy�� Ǯ���� �������´�.
+            // 운반 중 적이 깨어나면 운반자가 전체 Drop과 플레이어 반동을 처리한다.
             if (_state == RatState.Carried
                 && Faction == VehicleSide.Enemy
                 && _factory != null)
             {
-                Vector3 floor =
-                    _factory.Battlefield.NearestFloor(
-                        transform.position,
-                        Faction);
+                CarryController carryController = GetComponentInParent<CarryController>();
+                if (carryController != null)
+                {
+                    carryController.HandleCarriedEnemyRecovered(this);
+                    return;
+                }
 
-                _suppressCarryEvent = true;
+                Vector3 floor = _factory.Battlefield.NearestFloor(transform.position, Faction);
                 _carryable.Drop(floor);
-                _suppressCarryEvent = false;
-
                 ChangeState(_groundReturnState);
             }
         }
@@ -493,6 +638,27 @@ namespace SiegeCore.Rat
             }
 
             _carryable.RelocateAirborne(position);
+        }
+
+        /// <summary>강제 전체 Drop에서 Carry 상태와 실제 Carryable 상태를 함께 정리한다.</summary>
+        public void DropFromCarry(Vector3 position)
+        {
+            if (_state != RatState.Carried || !_carryable.IsCarried)
+            {
+                return;
+            }
+
+            Vector3 floor = position;
+            if (_factory != null)
+            {
+                floor = _factory.Battlefield.NearestFloor(position, Faction);
+            }
+
+            _suppressCarryEvent = true;
+            _carryable.Drop(floor);
+            _suppressCarryEvent = false;
+            _groggyUntil = 0f;
+            ChangeState(_groundReturnState);
         }
 
         public bool TryLoadIntoCannon(SiegeCore.Cannon.Cannon cannon)

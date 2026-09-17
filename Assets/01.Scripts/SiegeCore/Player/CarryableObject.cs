@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using DG.Tweening;
 using SiegeCore.Cannon;
@@ -11,6 +12,14 @@ namespace SiegeCore.Player
     [RequireComponent(typeof(Rigidbody2D), typeof(Collider2D))]
     public sealed class CarryableObject : MonoBehaviour, IThrowable
     {
+        private enum BatFlightPhase
+        {
+            None,
+            NormalKnockback,
+            FullChargeRoute,
+            WallReturn
+        }
+
         [Header("Landing")]
         [SerializeField] private Tilemap _groundTilemap;
         [SerializeField, Min(0f)] private float _snapSteering = 12f;
@@ -34,6 +43,43 @@ namespace SiegeCore.Player
         [SerializeField, Min(0.01f)] private float _minimumBounceSpeed = 0.8f;
         [SerializeField, Range(0f, 1f)] private float _wallRestitution = 0.5f;
 
+        [Header("Full Charge Impact")]
+        [SerializeField, Min(0f), Tooltip("풀차지 타격과 고속 충돌에서 해당 Rat만 멈추는 시간입니다.")]
+        private float _impactStopDuration = 0.06f;
+
+        [SerializeField, Min(0f), Tooltip("스쿼시된 외형이 원래 크기로 돌아오는 시간입니다.")]
+        private float _squashRecoveryDuration = 0.08f;
+
+        [SerializeField, Min(0f), Tooltip("벽 충돌 히트스톱이 발생하는 최소 수평 속도입니다.")]
+        private float _impactStopSpeedThreshold = 3f;
+
+        [SerializeField, Range(0.1f, 1f), Tooltip("충돌 방향 축에 적용하는 스쿼시 비율입니다. Collider에는 적용되지 않습니다.")]
+        private float _squashRatio = 0.65f;
+
+        [Header("Flight Weight")]
+        [SerializeField, Min(0f), Tooltip("등급 한 단계마다 비행 중 추가되는 초당 수평 감속입니다. B는 추가 감속이 없습니다.")]
+        private float _flightDecelerationPerRank = 1.5f;
+
+        [Header("Collision Fusion")]
+        [SerializeField, Min(0f), Tooltip("두 Rat이 충돌 합성될 수 있는 최대 가상 높이 차이입니다.")]
+        private float _fusionHeightTolerance = 0.45f;
+
+        [Header("Wall Popup")]
+        [SerializeField, Min(0f), Tooltip("벽 충돌 직전 수평 속력을 팝업 상승 속도로 바꾸는 배율입니다.")]
+        private float _popupVerticalSpeedMultiplier = 0.6f;
+
+        [SerializeField, Min(0f), Tooltip("벽 팝업의 최소 상승 속도입니다.")]
+        private float _minimumPopupVerticalSpeed = 11f;
+
+        [SerializeField, Min(0f), Tooltip("벽 팝업의 최대 상승 속도입니다.")]
+        private float _maximumPopupVerticalSpeed = 12f;
+
+        [SerializeField, Range(0f, 1f), Tooltip("예상 낙하지점을 현재 플레이어 위치 쪽으로 보정하는 비율입니다.")]
+        private float _popupPlayerBlend = 0.35f;
+
+        [SerializeField, Min(0f), Tooltip("팝업 후 플레이어 쪽으로 이동할 수 있는 최대 수평 속도입니다.")]
+        private float _maximumPopupReturnSpeed = 8f;
+
         [Header("Cannon")]
         [SerializeField, Min(0.01f)] private float _defaultCannonFlightDuration = 3f;
         [SerializeField, Min(0f)] private float _defaultCannonArcHeight = 2f;
@@ -45,6 +91,7 @@ namespace SiegeCore.Player
         private Transform _worldParent;
 
         private Vector3 _visualRestPosition;
+        private Vector3 _visualRestScale = Vector3.one;
         private SpriteRenderer _visualRenderer;
         private SpriteRenderer _shadowRenderer;
         private Transform _shadowTransform;
@@ -61,9 +108,26 @@ namespace SiegeCore.Player
         private bool _hasSnapTarget;
         private bool _isSnapping;
         private Tween _snapTween;
+        private CarryController _catchOwner;
+        private Transform _catchPoint;
+        private float _catchSteeringSpeed;
+        private float _catchSteeringAcceleration;
+        private bool _catchContact;
 
         private Vector2 _lastGroundPosition;
         private bool _hasGroundPosition;
+
+        private bool _isHitStopped;
+        private bool _fusionLocked;
+        private CarryableObject _fusionPartner;
+        private int _batSwingId;
+        private BatFlightPhase _batFlightPhase = BatFlightPhase.None;
+        private bool _canCollisionFuse;
+        private float _collisionFusionMinimumSpeedForFlight;
+        private Transform _batReturnTarget = null;
+        private Coroutine _impactRoutine;
+        private Vector2 _velocityBeforePhysicsStep = Vector2.zero;
+        private float _catchAllowedAt = 0f;
 
         private static readonly HashSet<CarryableObject> ActiveItems =
             new HashSet<CarryableObject>();
@@ -91,6 +155,19 @@ namespace SiegeCore.Player
         public bool IsAirborne { get; private set; }
         public bool IsLoaded { get; private set; }
         public bool IsCannonFlight { get; private set; }
+        public bool IsHitStopped { get { return _isHitStopped; } }
+        public bool IsFusionLocked { get { return _fusionLocked; } }
+        public bool CanBeCaughtInFlight
+        {
+            get
+            {
+                return IsAirborne
+                    && Time.time >= _catchAllowedAt
+                    && _verticalSpeed <= 0f
+                    && !_isHitStopped
+                    && !_fusionLocked && !_isSnapping && !IsCannonFlight;
+            }
+        }
 
         public CannonTrajectoryType TrajectoryType { get; private set; }
 
@@ -178,6 +255,7 @@ namespace SiegeCore.Player
             }
 
             _visualRestPosition = _visual.localPosition;
+            _visualRestScale = _visual.localScale;
             CreateShadow();
 
             CompleteSettle(false);
@@ -220,7 +298,7 @@ namespace SiegeCore.Player
 
         private void FixedUpdate()
         {
-            if (!IsAirborne || _isSnapping)
+            if (!IsAirborne || _isSnapping || _isHitStopped)
             {
                 return;
             }
@@ -231,7 +309,18 @@ namespace SiegeCore.Player
                 return;
             }
 
+            // 단계별 비행 감속은 현재 사용하지 않는다.
+            // B, BB, BBB 모두 같은 수평 속도를 유지한다.
+            // ApplyRankFlightDeceleration();
+            if (UpdateCatchAssist()) return;
             UpdateThrowFlight();
+            if (!IsAirborne) return;
+            _velocityBeforePhysicsStep = _rigidbody.linearVelocity;
+            if (TryHandleCollisionFusionOverlap())
+            {
+                return;
+            }
+
             ConstrainToGround();
         }
 
@@ -247,6 +336,7 @@ namespace SiegeCore.Player
         public void ResetForRat(Tilemap groundTilemap)
         {
             CancelSnap();
+            ResetBatFlightState();
             RestoreThrowerCollisions();
 
             _groundTilemap = groundTilemap;
@@ -345,6 +435,7 @@ namespace SiegeCore.Player
             _verticalSpeed = _upwardSpeed;
 
             _rigidbody.bodyType = RigidbodyType2D.Dynamic;
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             _rigidbody.linearDamping = 0f;
             _rigidbody.angularVelocity = 0f;
             _rigidbody.simulated = true;
@@ -352,6 +443,7 @@ namespace SiegeCore.Player
             _collider.isTrigger = false;
             _flightMaterial.bounciness = _wallRestitution;
             _collider.sharedMaterial = _flightMaterial;
+            RefreshRatCollisionPairs();
 
             IgnoreThrowerCollisions(throwerColliders);
 
@@ -430,6 +522,7 @@ namespace SiegeCore.Player
             _verticalSpeed = _upwardSpeed;
 
             _rigidbody.bodyType = RigidbodyType2D.Dynamic;
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             _rigidbody.linearDamping = 0f;
             _rigidbody.angularVelocity = 0f;
             _rigidbody.simulated = true;
@@ -437,13 +530,211 @@ namespace SiegeCore.Player
             _collider.isTrigger = false;
             _flightMaterial.bounciness = _wallRestitution;
             _collider.sharedMaterial = _flightMaterial;
+            RefreshRatCollisionPairs();
 
             NotifyStateChanged();
 
             _rigidbody.linearVelocity =
                 direction.normalized * Mathf.Max(0f, speed);
+            _velocityBeforePhysicsStep = _rigidbody.linearVelocity;
 
             return true;
+        }
+
+        /// <summary>
+        /// 빠따 발사 정보를 비행 객체에 기록한다. 풀차지는 로컬 히트스톱이 끝난 뒤 출발한다.
+        /// </summary>
+        public bool TryBatLaunch(
+            Tilemap groundTilemap,
+            Vector2 direction,
+            float horizontalSpeed,
+            float verticalSpeed,
+            float catchLockDuration,
+            float collisionFusionMinimumSpeed,
+            int swingId,
+            bool isFullCharge,
+            Transform returnTarget)
+        {
+            // 벽 팝업이나 기존 히트스톱 중 다시 맞으면 이전 비행 문맥을 먼저 끝낸다.
+            // 이전 코루틴이 새 타격 속도를 나중에 덮어쓰는 것을 방지한다.
+            ResetBatFlightState();
+
+            if (!TryDispense(groundTilemap, direction, horizontalSpeed))
+            {
+                return false;
+            }
+
+            _batSwingId = swingId;
+            _canCollisionFuse = isFullCharge;
+            _collisionFusionMinimumSpeedForFlight =
+                Mathf.Max(0f, collisionFusionMinimumSpeed);
+            _batReturnTarget = returnTarget;
+            _verticalSpeed = Mathf.Max(0f, verticalSpeed);
+            _catchAllowedAt = Time.time + Mathf.Max(0f, catchLockDuration);
+
+            if (isFullCharge)
+            {
+                _batFlightPhase = BatFlightPhase.FullChargeRoute;
+                Vector2 launchVelocity =
+                    direction.normalized * Mathf.Max(0f, horizontalSpeed);
+                BeginImpactStop(launchVelocity, -direction.normalized);
+            }
+            else
+            {
+                _batFlightPhase = BatFlightPhase.NormalKnockback;
+            }
+
+            return true;
+        }
+
+        public float HeightGravity { get { return _heightGravity; } }
+
+        /// <summary>Airborne Rat을 머리 슬롯에 붙이는 전용 경로다.</summary>
+        internal bool TryCatch(Transform holdPoint)
+        {
+            if (!_catchContact || _rat == null || !_rat.CanBeCaught
+                || _fusionLocked || holdPoint == null || holdPoint.IsChildOf(transform)) return false;
+            CancelSnap();
+            ResetBatFlightState();
+            _worldParent = transform.parent;
+            IsCarried = true;
+            IsAirborne = false;
+            IsLoaded = false;
+            IsCannonFlight = false;
+            RefreshRatCollisionPairs();
+            _height = 0f;
+            _verticalSpeed = 0f;
+            _rigidbody.linearVelocity = Vector2.zero;
+            _rigidbody.simulated = false;
+            transform.SetParent(holdPoint, false);
+            transform.localPosition = Vector3.zero;
+            ResetVisualHeight();
+            NotifyStateChanged();
+            return true;
+        }
+
+        public Transform CarryVisual => _visual;
+        public Vector3 CarryVisualRestScale => _visualRestScale;
+        public bool IsCatchAssisted => _catchOwner != null;
+        internal bool HasCatchAssist(CarryController owner) => _catchOwner == owner;
+
+        internal float GetTimeToCatchPoint(Transform point)
+        {
+            float gap = PhysicsPosition.y + _height - point.position.y;
+            if (gap < 0f) return float.PositiveInfinity;
+            float gravity = Mathf.Max(0.01f, _heightGravity);
+            float projectedSpeed = _verticalSpeed + _rigidbody.linearVelocity.y;
+            return (projectedSpeed + Mathf.Sqrt(projectedSpeed * projectedSpeed + 2f * gravity * gap)) / gravity;
+        }
+
+        internal void BeginCatchAssist(CarryController owner, Transform point, float speed, float acceleration)
+        {
+            if (IsCatchAssisted || _rat == null || !_rat.CanBeCaught) return;
+            _catchOwner = owner;
+            _catchPoint = point;
+            _catchSteeringSpeed = speed;
+            _catchSteeringAcceleration = acceleration;
+        }
+
+        internal void CancelCatchAssist(CarryController owner)
+        {
+            if (_catchOwner != owner) return;
+            _catchOwner = null;
+            _catchPoint = null;
+            _catchContact = false;
+        }
+
+        // Height follows gravity throughout assist; only the ground-plane velocity is steered.
+        private bool UpdateCatchAssist()
+        {
+            if (_catchOwner == null) return false;
+            CarryController owner = _catchOwner;
+            Transform point = _catchPoint;
+            if (_rat == null || !_rat.CanBeCaught || !owner.IsCatchReservationValid(this, point))
+            {
+                CancelCatchAssist(owner);
+                return false;
+            }
+            float contactTime = GetTimeToCatchPoint(point);
+            if (float.IsPositiveInfinity(contactTime))
+            {
+                CancelCatchAssist(owner);
+                return false;
+            }
+            Vector2 offset = owner.GetCatchGroundPosition(point) - PhysicsPosition;
+            Vector2 desiredVelocity = Vector2.ClampMagnitude(
+                offset / Mathf.Max(Time.fixedDeltaTime, contactTime), _catchSteeringSpeed);
+            _rigidbody.linearVelocity = Vector2.MoveTowards(_rigidbody.linearVelocity,
+                desiredVelocity, _catchSteeringAcceleration * Time.fixedDeltaTime);
+            contactTime = GetTimeToCatchPoint(point);
+            if (contactTime > Time.fixedDeltaTime) return false;
+            float contactHeight = _height + _verticalSpeed * contactTime
+                - 0.5f * Mathf.Max(0.01f, _heightGravity) * contactTime * contactTime;
+            if (contactHeight < 0f)
+            {
+                CancelCatchAssist(owner);
+                return false;
+            }
+
+            // Sweep to the height crossing so a fast fall cannot skip the landing plane.
+            Vector2 contactPosition = PhysicsPosition + _rigidbody.linearVelocity * contactTime;
+            _catchContact = true;
+            bool caught = owner.TryCompleteCatch(this, point, contactPosition);
+            _catchContact = false;
+            if (!caught) CancelCatchAssist(owner);
+            return caught;
+        }
+        /// <summary>
+        /// 충돌 합성 결과를 원본 Rat의 방향과 속도로 계속 비행시킨다.
+        /// 벽 팝업 전에는 풀차지 비행 문맥도 전달해 다음 Rat과 연쇄 합성할 수 있게 한다.
+        /// </summary>
+        public void BeginCollisionFusionFlight(
+            Tilemap groundTilemap,
+            Vector3 groundPosition,
+            float height,
+            float verticalSpeed,
+            Vector2 velocity,
+            float catchAllowedAt,
+            int swingId,
+            float collisionFusionMinimumSpeed,
+            Transform returnTarget)
+        {
+            CancelSnap();
+            ResetBatFlightState();
+            RestoreThrowerCollisions();
+
+            _groundTilemap = groundTilemap;
+            _worldParent = transform.parent;
+            transform.position = groundPosition;
+            _rigidbody.position = groundPosition;
+
+            IsCarried = false;
+            IsLoaded = false;
+            IsCannonFlight = false;
+            IsAirborne = true;
+            _height = Mathf.Max(0f, height);
+            _verticalSpeed = verticalSpeed;
+            _catchAllowedAt = Mathf.Max(Time.time, catchAllowedAt);
+            _batSwingId = swingId;
+            _batReturnTarget = returnTarget;
+            _batFlightPhase = BatFlightPhase.FullChargeRoute;
+            _canCollisionFuse = true;
+            _collisionFusionMinimumSpeedForFlight =
+                Mathf.Max(0f, collisionFusionMinimumSpeed);
+
+            _rigidbody.bodyType = RigidbodyType2D.Dynamic;
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            _rigidbody.linearDamping = 0f;
+            _rigidbody.angularVelocity = 0f;
+            _rigidbody.simulated = true;
+            _collider.isTrigger = false;
+            _flightMaterial.bounciness = _wallRestitution;
+            _collider.sharedMaterial = _flightMaterial;
+            RefreshRatCollisionPairs();
+
+            NotifyStateChanged();
+            _rigidbody.linearVelocity = velocity;
+            _velocityBeforePhysicsStep = velocity;
         }
 
         public void BeginRatFall(
@@ -463,6 +754,7 @@ namespace SiegeCore.Player
             _verticalSpeed = 0f;
 
             _rigidbody.bodyType = RigidbodyType2D.Dynamic;
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             _rigidbody.simulated = true;
             _rigidbody.linearVelocity = Vector2.zero;
 
@@ -509,6 +801,14 @@ namespace SiegeCore.Player
 
                 _height = 0f;
 
+                if (_batFlightPhase == BatFlightPhase.FullChargeRoute)
+                {
+                    // 풀차지 비행은 벽에 도달하기 전까지 지면 착지로 종료하지 않는다.
+                    // 가상 높이만 지면에 고정하고 수평 운동량은 그대로 유지한다.
+                    _verticalSpeed = 0f;
+                    break;
+                }
+
                 _verticalSpeed =
                     impactSpeed
                     * Mathf.Clamp(
@@ -534,7 +834,7 @@ namespace SiegeCore.Player
                 }
             }
 
-            if (_hasSnapTarget)
+            if (_hasSnapTarget && !IsCatchAssisted)
             {
                 SteerTowardSnapTarget();
             }
@@ -943,6 +1243,70 @@ namespace SiegeCore.Player
                        new Vector2(extents.x, extents.y));
         }
 
+        /// <summary>
+        /// 합성으로 Collider 크기가 바뀐 직후에도 전체 발자국이 타일 안에 들어오는 가장 가까운 위치를 찾는다.
+        /// 유효한 셀 중심을 찾은 뒤 원래 합성 지점 쪽으로 보간해 불필요한 위치 이동을 줄인다.
+        /// </summary>
+        public Vector2 FindNearestValidGroundPosition(
+            Tilemap groundTilemap,
+            Vector2 desiredPosition)
+        {
+            _groundTilemap = groundTilemap;
+            if (_groundTilemap == null || IsGroundFootprintValid(desiredPosition))
+            {
+                return desiredPosition;
+            }
+
+            Vector2 nearestValidPosition = desiredPosition;
+            float nearestDistance = float.PositiveInfinity;
+
+            foreach (Vector3Int cell in _groundTilemap.cellBounds.allPositionsWithin)
+            {
+                if (!_groundTilemap.HasTile(cell))
+                {
+                    continue;
+                }
+
+                Vector2 candidate = _groundTilemap.GetCellCenterWorld(cell);
+                if (!IsGroundFootprintValid(candidate))
+                {
+                    continue;
+                }
+
+                float distance = (candidate - desiredPosition).sqrMagnitude;
+                if (distance >= nearestDistance)
+                {
+                    continue;
+                }
+
+                nearestDistance = distance;
+                nearestValidPosition = candidate;
+            }
+
+            if (float.IsPositiveInfinity(nearestDistance))
+            {
+                return desiredPosition;
+            }
+
+            Vector2 validPosition = nearestValidPosition;
+            Vector2 invalidPosition = desiredPosition;
+            const int interpolationSteps = 8;
+            for (int index = 0; index < interpolationSteps; index++)
+            {
+                Vector2 candidate = Vector2.Lerp(validPosition, invalidPosition, 0.5f);
+                if (IsGroundFootprintValid(candidate))
+                {
+                    validPosition = candidate;
+                }
+                else
+                {
+                    invalidPosition = candidate;
+                }
+            }
+
+            return validPosition;
+        }
+
         private bool HasGroundAtFootprintPoint(
             Vector2 predictedCenter,
             Vector2 positionOffset,
@@ -1049,18 +1413,104 @@ namespace SiegeCore.Player
 
             Vector2 velocity = _rigidbody.linearVelocity;
             float restitution = Mathf.Clamp01(_wallRestitution);
+            bool hitX = currentHitX || nextHitX;
+            bool hitY = currentHitY || nextHitY;
+            bool hitWall = hitX || hitY;
 
-            if (currentHitX || nextHitX)
+            if (hitWall
+                && _batSwingId != 0
+                && _batFlightPhase == BatFlightPhase.FullChargeRoute)
+            {
+                Vector2 impactNormal = GetImpactNormal(hitX, hitY, velocity);
+                float incomingSpeed = velocity.magnitude;
+                Vector2 popupVelocity = CalculateWallPopupVelocity(allowed, incomingSpeed);
+                _batFlightPhase = BatFlightPhase.WallReturn;
+
+                if (incomingSpeed >= _impactStopSpeedThreshold)
+                {
+                    BeginImpactStop(popupVelocity, impactNormal);
+                }
+                else
+                {
+                    _rigidbody.linearVelocity = popupVelocity;
+                    _velocityBeforePhysicsStep = popupVelocity;
+                }
+
+                return;
+            }
+
+            if (hitWall
+                && _batSwingId != 0
+                && _batFlightPhase == BatFlightPhase.WallReturn)
+            {
+                if (hitX)
+                {
+                    velocity.x = 0f;
+                }
+
+                if (hitY)
+                {
+                    velocity.y = 0f;
+                }
+
+                _rigidbody.linearVelocity = velocity;
+                return;
+            }
+
+            if (hitX)
             {
                 velocity.x = -velocity.x * restitution;
             }
 
-            if (currentHitY || nextHitY)
+            if (hitY)
             {
                 velocity.y = -velocity.y * restitution;
             }
 
             _rigidbody.linearVelocity = velocity;
+        }
+
+        /// <summary>
+        /// 풀차지 비행의 첫 벽 충돌 운동량을 수직 팝업과 플레이어 쪽 회수 이동으로 변환한다.
+        /// </summary>
+        private Vector2 CalculateWallPopupVelocity(
+            Vector2 wallPosition,
+            float incomingSpeed)
+        {
+            float minimumPopupSpeed = Mathf.Max(0f, _minimumPopupVerticalSpeed);
+            float maximumPopupSpeed = Mathf.Max(minimumPopupSpeed, _maximumPopupVerticalSpeed);
+            float popupVerticalSpeed = Mathf.Clamp(
+                incomingSpeed * Mathf.Max(0f, _popupVerticalSpeedMultiplier),
+                minimumPopupSpeed,
+                maximumPopupSpeed);
+            _verticalSpeed = popupVerticalSpeed;
+
+            if (_batReturnTarget == null)
+            {
+                return Vector2.zero;
+            }
+
+            Vector2 playerPosition = _batReturnTarget.position;
+            Vector2 desiredLandingPosition = Vector2.Lerp(
+                wallPosition,
+                playerPosition,
+                Mathf.Clamp01(_popupPlayerBlend));
+            desiredLandingPosition = FindNearestValidGroundPosition(
+                _groundTilemap,
+                desiredLandingPosition);
+
+            float gravity = Mathf.Max(0.01f, _heightGravity);
+            float impactSpeed = Mathf.Sqrt(
+                popupVerticalSpeed * popupVerticalSpeed
+                + 2f * gravity * Mathf.Max(0f, _height));
+            float flightTime = Mathf.Max(
+                0.01f,
+                (popupVerticalSpeed + impactSpeed) / gravity);
+            Vector2 returnVelocity =
+                (desiredLandingPosition - wallPosition) / flightTime;
+            return Vector2.ClampMagnitude(
+                returnVelocity,
+                Mathf.Max(0f, _maximumPopupReturnSpeed));
         }
 
         public void RelocateAirborne(Vector2 position)
@@ -1104,6 +1554,7 @@ namespace SiegeCore.Player
             _rigidbody.linearVelocity = Vector2.zero;
             _rigidbody.angularVelocity = 0f;
             _rigidbody.bodyType = RigidbodyType2D.Kinematic;
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode2D.Discrete;
             _rigidbody.simulated = true;
 
             _collider.isTrigger = true;
@@ -1115,6 +1566,7 @@ namespace SiegeCore.Player
         private void CompleteSettle(bool notify)
         {
             CancelSnap();
+            ResetBatFlightState();
 
             PrepareGroundPhysics();
 
@@ -1122,6 +1574,7 @@ namespace SiegeCore.Player
             IsAirborne = false;
             IsLoaded = false;
             IsCannonFlight = false;
+            RefreshRatCollisionPairs();
 
             _hasSnapTarget = false;
 
@@ -1154,6 +1607,7 @@ namespace SiegeCore.Player
             }
 
             CancelSnap();
+            ResetBatFlightState();
             RestoreThrowerCollisions();
             GroundSortingRequested?.Invoke(this);
 
@@ -1214,6 +1668,7 @@ namespace SiegeCore.Player
             IsLoaded = false;
             IsAirborne = true;
             IsCannonFlight = true;
+            RefreshRatCollisionPairs();
 
             TrajectoryType = trajectoryType;
 
@@ -1346,6 +1801,375 @@ namespace SiegeCore.Player
         }
 
         // --------------------------------------------------------------------
+        // Full-charge impact / collision fusion
+        // --------------------------------------------------------------------
+
+        /// <summary>
+        /// Rat Collider끼리는 물리 충돌하지 않는다. 풀차지 Rat이 첫 벽 팝업에 도달하기 전
+        /// 충분한 속도로 다른 Rat과 겹쳤을 때만 연쇄 합성 조건을 검사한다.
+        /// </summary>
+        private bool TryHandleCollisionFusionOverlap()
+        {
+            if (!IsAirborne
+                || _batSwingId == 0
+                || _batFlightPhase != BatFlightPhase.FullChargeRoute
+                || !_canCollisionFuse
+                || _isHitStopped
+                || _fusionLocked)
+            {
+                return false;
+            }
+
+            bool hasFusionSpeed = _rigidbody.linearVelocity.magnitude
+                >= _collisionFusionMinimumSpeedForFlight;
+
+            foreach (CarryableObject other in ActiveItems)
+            {
+                if (other == null
+                    || other == this
+                    || other._rat == null
+                    || other._collider == null
+                    || other._fusionLocked)
+                {
+                    continue;
+                }
+
+                ColliderDistance2D distance = _collider.Distance(other._collider);
+                if (!distance.isOverlapped)
+                {
+                    continue;
+                }
+
+                if (!hasFusionSpeed)
+                {
+                    continue;
+                }
+
+                if (TryBeginCollisionFusion(other))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool TryBeginCollisionFusion(CarryableObject other)
+        {
+            string rejectionReason = GetCollisionFusionRejectionReason(other);
+            if (rejectionReason != null)
+            {
+                return false;
+            }
+
+            RatAgent otherRat = other._rat;
+            Vector3 midpoint = (transform.position + other.transform.position) * 0.5f;
+            int basicCount = _rat.Definition.BasicCount + otherRat.Definition.BasicCount;
+
+            _fusionLocked = true;
+            other._fusionLocked = true;
+            _fusionPartner = other;
+            other._fusionPartner = this;
+
+            RatForm resultForm = (RatForm)basicCount;
+            CompleteCollisionFusion(other, resultForm, midpoint);
+
+            return true;
+        }
+
+        private string GetCollisionFusionRejectionReason(CarryableObject other)
+        {
+            if (_rat == null || other == null || other._rat == null)
+            {
+                return "Rat 참조 없음";
+            }
+
+            RatAgent otherRat = other._rat;
+            if (_rat.Faction != VehicleSide.Ally
+                || otherRat.Faction != VehicleSide.Ally)
+            {
+                return "아군 조합이 아님";
+            }
+
+            if (_rat.Factory == null || _rat.Factory != otherRat.Factory)
+            {
+                return "Factory가 다르거나 없음";
+            }
+
+            if (_rat.Definition == null || otherRat.Definition == null)
+            {
+                return "Rat Definition 없음";
+            }
+
+            Vector3 midpoint = (transform.position + other.transform.position) * 0.5f;
+            if (!_rat.Factory.Battlefield.IsSafe(midpoint))
+            {
+                return "Safe Zone 밖";
+            }
+
+            float heightDifference = Mathf.Abs(_height - other._height);
+            if (heightDifference > _fusionHeightTolerance)
+            {
+                return "높이 차이 " + heightDifference.ToString("F2")
+                    + " > " + _fusionHeightTolerance.ToString("F2");
+            }
+
+            int basicCount = _rat.Definition.BasicCount + otherRat.Definition.BasicCount;
+            if (basicCount < 2 || basicCount > 3)
+            {
+                return "합산 랭크 " + basicCount + " (허용 2~3)";
+            }
+
+            return null;
+        }
+
+        private void CompleteCollisionFusion(
+            CarryableObject other,
+            RatForm resultForm,
+            Vector3 position)
+        {
+            if (other == null || _rat == null || _rat.Factory == null)
+            {
+                _fusionLocked = false;
+                _fusionPartner = null;
+                _isHitStopped = false;
+                ResetVisualScale();
+                return;
+            }
+
+            RatFactory factory = _rat.Factory;
+            RatAgent first = _rat;
+            RatAgent second = other._rat;
+            // Rat끼리의 물리 충돌은 제외되어 있으므로 현재 속도가 합성 직전 운동량이다.
+            // 이전 FixedUpdate 캐시는 Hit Stop이나 풀링 전환 때문에 오래된 값일 수 있다.
+            Vector2 preservedVelocity = _rigidbody.linearVelocity;
+            float preservedHeight = _height;
+            float preservedVerticalSpeed = _verticalSpeed;
+            float preservedCatchAllowedAt = _catchAllowedAt;
+            int preservedSwingId = _batSwingId;
+            float preservedFusionMinimumSpeed =
+                _collisionFusionMinimumSpeedForFlight;
+            Transform preservedReturnTarget = _batReturnTarget;
+            RatAgent result = factory.Spawn(resultForm, VehicleSide.Ally, position);
+
+            if (result == null)
+            {
+                _fusionLocked = false;
+                other._fusionLocked = false;
+                _fusionPartner = null;
+                other._fusionPartner = null;
+                _isHitStopped = false;
+                other._isHitStopped = false;
+                ResetVisualScale();
+                other.ResetVisualScale();
+                return;
+            }
+
+            Vector2 safePosition = result.Carryable.FindNearestValidGroundPosition(
+                factory.Battlefield.Ground,
+                position);
+
+            result.ContinueAfterCollisionFusion(
+                safePosition,
+                preservedHeight,
+                preservedVerticalSpeed,
+                preservedVelocity,
+                preservedCatchAllowedAt,
+                preservedSwingId,
+                preservedFusionMinimumSpeed,
+                preservedReturnTarget);
+
+            second.Release();
+            first.Release();
+        }
+
+        private void ApplyRankFlightDeceleration()
+        {
+            if (_rat == null || _rat.Definition == null)
+            {
+                return;
+            }
+
+            int additionalRanks = Mathf.Max(0, _rat.Definition.BasicCount - 1);
+            if (additionalRanks == 0)
+            {
+                return;
+            }
+
+            float deceleration = _flightDecelerationPerRank * additionalRanks;
+            _rigidbody.linearVelocity = Vector2.MoveTowards(
+                _rigidbody.linearVelocity,
+                Vector2.zero,
+                deceleration * Time.fixedDeltaTime);
+        }
+
+        private void BeginImpactStop(
+            Vector2 resumeVelocity,
+            Vector2 impactNormal)
+        {
+            if (_impactRoutine != null)
+            {
+                StopCoroutine(_impactRoutine);
+            }
+
+            _impactRoutine = StartCoroutine(ImpactStopRoutine(
+                resumeVelocity,
+                impactNormal));
+        }
+
+        private IEnumerator ImpactStopRoutine(
+            Vector2 resumeVelocity,
+            Vector2 impactNormal)
+        {
+            _isHitStopped = true;
+            _rigidbody.linearVelocity = Vector2.zero;
+            ApplySquash(impactNormal);
+
+            yield return new WaitForSeconds(Mathf.Max(0f, _impactStopDuration));
+
+            float recoveryDuration = Mathf.Max(0.001f, _squashRecoveryDuration);
+            float elapsed = 0f;
+            Vector3 squashedScale = _visual.localScale;
+            while (elapsed < recoveryDuration)
+            {
+                elapsed += Time.deltaTime;
+                float progress = Mathf.Clamp01(elapsed / recoveryDuration);
+                _visual.localScale = Vector3.Lerp(squashedScale, _visualRestScale, progress);
+                yield return null;
+            }
+
+            ResetVisualScale();
+            _isHitStopped = false;
+            _rigidbody.linearVelocity = resumeVelocity;
+            _velocityBeforePhysicsStep = resumeVelocity;
+            _impactRoutine = null;
+        }
+
+        private void ApplySquash(Vector2 impactNormal)
+        {
+            if (_visual == null)
+            {
+                return;
+            }
+
+            Vector3 scale = _visualRestScale;
+            if (Mathf.Abs(impactNormal.x) >= Mathf.Abs(impactNormal.y))
+            {
+                scale.x *= _squashRatio;
+                scale.y /= Mathf.Max(0.1f, _squashRatio);
+            }
+            else
+            {
+                scale.y *= _squashRatio;
+                scale.x /= Mathf.Max(0.1f, _squashRatio);
+            }
+
+            _visual.localScale = scale;
+        }
+
+        private Vector2 GetImpactNormal(bool hitX, bool hitY, Vector2 velocity)
+        {
+            Vector2 normal = Vector2.zero;
+            if (hitX)
+            {
+                if (velocity.x > 0f)
+                {
+                    normal.x = -1f;
+                }
+                else
+                {
+                    normal.x = 1f;
+                }
+            }
+
+            if (hitY)
+            {
+                if (velocity.y > 0f)
+                {
+                    normal.y = -1f;
+                }
+                else
+                {
+                    normal.y = 1f;
+                }
+            }
+
+            return normal.normalized;
+        }
+
+        private void ResetBatFlightState()
+        {
+            CancelCatchAssist(_catchOwner);
+            if (_impactRoutine != null)
+            {
+                StopCoroutine(_impactRoutine);
+                _impactRoutine = null;
+            }
+
+            _isHitStopped = false;
+            _fusionLocked = false;
+            if (_fusionPartner != null)
+            {
+                CarryableObject partner = _fusionPartner;
+                _fusionPartner = null;
+                partner._fusionLocked = false;
+                partner._fusionPartner = null;
+                partner._isHitStopped = false;
+                partner.ResetVisualScale();
+            }
+            _batSwingId = 0;
+            _batFlightPhase = BatFlightPhase.None;
+            _canCollisionFuse = false;
+            _collisionFusionMinimumSpeedForFlight = 0f;
+            _batReturnTarget = null;
+            _velocityBeforePhysicsStep = Vector2.zero;
+            _catchAllowedAt = 0f;
+            ResetVisualScale();
+        }
+
+        /// <summary>
+        /// Rat끼리는 물리적으로 밀거나 도탄시키지 않는다. 합성은 별도의 겹침 검사로 처리한다.
+        /// </summary>
+        private static void RefreshRatCollisionPairs()
+        {
+            foreach (CarryableObject first in ActiveItems)
+            {
+                if (first == null || first._rat == null || first._collider == null)
+                {
+                    continue;
+                }
+
+                foreach (CarryableObject second in ActiveItems)
+                {
+                    if (second == null
+                        || second._rat == null
+                        || second._collider == null
+                        || first.GetInstanceID() >= second.GetInstanceID())
+                    {
+                        continue;
+                    }
+
+                    // 일반 Rat끼리는 통과시키되, 대포 비행 중인 Rat은
+                    // Projectile의 Trigger 충돌과 상쇄 판정을 받을 수 있어야 한다.
+                    bool shouldIgnore = !first.IsCannonFlight
+                        && !second.IsCannonFlight;
+                    Physics2D.IgnoreCollision(
+                        first._collider,
+                        second._collider,
+                        shouldIgnore);
+                }
+            }
+        }
+
+        private void ResetVisualScale()
+        {
+            if (_visual != null)
+            {
+                _visual.localScale = _visualRestScale;
+            }
+        }
+
+        // --------------------------------------------------------------------
         // Helpers
         // --------------------------------------------------------------------
 
@@ -1424,6 +2248,7 @@ namespace SiegeCore.Player
             _isSnapping = false;
             _hasSnapTarget = false;
             _hasGroundPosition = false;
+
         }
 
         private void NotifyStateChanged()
@@ -1434,14 +2259,17 @@ namespace SiegeCore.Player
         private void OnDisable()
         {
             GroundSortingRequested?.Invoke(this);
-            ActiveItems.Remove(this);
             CancelSnap();
+            ResetBatFlightState();
             RestoreThrowerCollisions();
+            ActiveItems.Remove(this);
+            RefreshRatCollisionPairs();
         }
 
         private void OnEnable()
         {
             ActiveItems.Add(this);
+            RefreshRatCollisionPairs();
         }
 
         private void OnDestroy()

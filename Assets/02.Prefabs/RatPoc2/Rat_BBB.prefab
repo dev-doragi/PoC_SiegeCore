@@ -122,13 +122,21 @@ MonoBehaviour:
   _shadowAlpha: 0.35
   _shadowAirScale: 0.6
   _shadowOffset: {x: 0, y: -0.8}
-  _throwSpeed: 5.5
-  _upwardSpeed: 4
+  _throwSpeed: 3.5
+  _upwardSpeed: 6
   _heightGravity: 16
   _bounceRestitution: 0.45
   _groundSpeedRetention: 0.65
   _minimumBounceSpeed: 0.8
   _wallRestitution: 0.5
+  _impactStopDuration: 0.06
+  _squashRecoveryDuration: 0.08
+  _impactStopSpeedThreshold: 3
+  _squashRatio: 0.65
+  _flightDecelerationPerRank: 1.5
+  _fusionHeightTolerance: 0.45
+  _minimumBatCatchLockDuration: 0.2
+  _maximumBatCatchLockDuration: 0.9
   _defaultCannonFlightDuration: 3
   _defaultCannonArcHeight: 2
 --- !u!114 &7793670448139167708

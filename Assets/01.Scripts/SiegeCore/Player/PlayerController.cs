@@ -9,6 +9,7 @@ namespace SiegeCore.Player
 
         public Vector2 MoveInput { get; private set; }
         public bool IsMoving => _motor != null && _motor.IsMoving;
+        public bool IsKnockedBack => _motor != null && _motor.IsKnockedBack;
         public Vector2 Velocity => _motor != null ? _motor.Velocity : Vector2.zero;
 
         private void Awake()
@@ -56,6 +57,30 @@ namespace SiegeCore.Player
         public void StopMovementFor(float duration)
         {
             if (_motor != null) _motor.StopMovementFor(duration);
+        }
+
+        public void SetActionMovementLocked(bool locked)
+        {
+            if (_motor != null)
+            {
+                _motor.SetActionMovementLocked(locked);
+            }
+        }
+
+        public void SetActionMovementSpeedMultiplier(float multiplier)
+        {
+            if (_motor != null)
+            {
+                _motor.SetActionMovementSpeedMultiplier(multiplier);
+            }
+        }
+
+        public void ApplyKnockback(Vector2 direction, float speed, float duration)
+        {
+            if (_motor != null)
+            {
+                _motor.ApplyKnockback(direction, speed, duration);
+            }
         }
     }
 }
