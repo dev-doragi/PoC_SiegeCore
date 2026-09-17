@@ -62,6 +62,9 @@ namespace SiegeCore.Player
         private bool _isSnapping;
         private Tween _snapTween;
 
+        private Vector2 _lastGroundPosition;
+        private bool _hasGroundPosition;
+
         private static readonly HashSet<CarryableObject> ActiveItems =
             new HashSet<CarryableObject>();
 
@@ -229,6 +232,7 @@ namespace SiegeCore.Player
             }
 
             UpdateThrowFlight();
+            ConstrainToGround();
         }
 
         private void LateUpdate()
@@ -370,6 +374,26 @@ namespace SiegeCore.Player
                 || IsLoaded
                 || IsCannonFlight
                 || _isSnapping)
+            {
+                return false;
+            }
+
+            if (_groundTilemap == null)
+            {
+                return false;
+            }
+
+            bool hitX;
+            bool hitY;
+            Vector2 bounded = ResolveGroundMotion(
+                _rigidbody.position,
+                position,
+                out hitX,
+                out hitY);
+
+            if (hitX
+                || hitY
+                || (bounded - position).sqrMagnitude > 0.000001f)
             {
                 return false;
             }
@@ -533,6 +557,10 @@ namespace SiegeCore.Player
                 _rigidbody.position
                 + _rigidbody.linearVelocity
                 * GetRemainingTravelTime();
+
+            expectedPosition = TraceGround(
+                _rigidbody.position,
+                expectedPosition);
 
             Vector3 worldPosition = new Vector3(
                 expectedPosition.x,
@@ -765,6 +793,292 @@ namespace SiegeCore.Player
         // --------------------------------------------------------------------
         // Ground
         // --------------------------------------------------------------------
+
+        private Vector3Int GroundCell(Vector2 position)
+        {
+            Vector3 worldPosition = new Vector3(
+                position.x,
+                position.y,
+                transform.position.z);
+
+            return _groundTilemap.WorldToCell(worldPosition);
+        }
+
+        private Vector2 TraceGround(Vector2 start, Vector2 end)
+        {
+            bool hitX;
+            bool hitY;
+
+            return ResolveGroundMotion(
+                start,
+                end,
+                out hitX,
+                out hitY);
+        }
+
+        private Vector2 ResolveGroundMotion(
+            Vector2 start,
+            Vector2 end,
+            out bool hitX,
+            out bool hitY)
+        {
+            Vector3 origin =
+                _groundTilemap.GetCellCenterWorld(Vector3Int.zero);
+
+            float cellWidth = Vector3.Distance(
+                origin,
+                _groundTilemap.GetCellCenterWorld(Vector3Int.right));
+
+            float cellHeight = Vector3.Distance(
+                origin,
+                _groundTilemap.GetCellCenterWorld(Vector3Int.up));
+
+            float step = Mathf.Max(
+                0.001f,
+                Mathf.Min(cellWidth, cellHeight) * 0.1f);
+
+            int steps = Mathf.Max(
+                1,
+                Mathf.CeilToInt(Vector2.Distance(start, end) / step));
+
+            Vector2 resolved = start;
+            Vector2 segment = (end - start) / steps;
+            bool moveX = Mathf.Abs(segment.x) > 0.000001f;
+            bool moveY = Mathf.Abs(segment.y) > 0.000001f;
+
+            hitX = false;
+            hitY = false;
+
+            for (int index = 1; index <= steps; index++)
+            {
+                if (moveX && !hitX)
+                {
+                    Vector2 xCandidate =
+                        resolved + new Vector2(segment.x, 0f);
+
+                    if (IsGroundFootprintValid(xCandidate))
+                    {
+                        resolved.x = xCandidate.x;
+                    }
+                    else
+                    {
+                        hitX = true;
+                    }
+                }
+
+                if (moveY && !hitY)
+                {
+                    Vector2 yCandidate =
+                        resolved + new Vector2(0f, segment.y);
+
+                    if (IsGroundFootprintValid(yCandidate))
+                    {
+                        resolved.y = yCandidate.y;
+                    }
+                    else
+                    {
+                        hitY = true;
+                    }
+                }
+
+                if ((!moveX || hitX)
+                    && (!moveY || hitY))
+                {
+                    break;
+                }
+            }
+
+            return resolved;
+        }
+
+        private bool IsGroundFootprintValid(Vector2 bodyPosition)
+        {
+            if (_groundTilemap == null || _collider == null)
+            {
+                return false;
+            }
+
+            Bounds bounds = _collider.bounds;
+            Vector2 currentBodyPosition = _rigidbody.position;
+            Vector2 positionOffset = bodyPosition - currentBodyPosition;
+            Vector2 center = (Vector2)bounds.center + positionOffset;
+            Vector2 extents = bounds.extents;
+
+            if (!HasGroundAt(center))
+            {
+                return false;
+            }
+
+            return HasGroundAtFootprintPoint(
+                       center,
+                       positionOffset,
+                       new Vector2(-extents.x, 0f))
+                && HasGroundAtFootprintPoint(
+                       center,
+                       positionOffset,
+                       new Vector2(extents.x, 0f))
+                && HasGroundAtFootprintPoint(
+                       center,
+                       positionOffset,
+                       new Vector2(0f, -extents.y))
+                && HasGroundAtFootprintPoint(
+                       center,
+                       positionOffset,
+                       new Vector2(0f, extents.y))
+                && HasGroundAtFootprintPoint(
+                       center,
+                       positionOffset,
+                       new Vector2(-extents.x, -extents.y))
+                && HasGroundAtFootprintPoint(
+                       center,
+                       positionOffset,
+                       new Vector2(-extents.x, extents.y))
+                && HasGroundAtFootprintPoint(
+                       center,
+                       positionOffset,
+                       new Vector2(extents.x, -extents.y))
+                && HasGroundAtFootprintPoint(
+                       center,
+                       positionOffset,
+                       new Vector2(extents.x, extents.y));
+        }
+
+        private bool HasGroundAtFootprintPoint(
+            Vector2 predictedCenter,
+            Vector2 positionOffset,
+            Vector2 boundsOffset)
+        {
+            Vector2 currentBoundsCenter =
+                predictedCenter - positionOffset;
+
+            Vector2 closest = _collider.ClosestPoint(
+                currentBoundsCenter + boundsOffset);
+
+            Vector2 predictedPoint = closest + positionOffset;
+            predictedPoint = Vector2.MoveTowards(
+                predictedPoint,
+                predictedCenter,
+                0.001f);
+
+            return HasGroundAt(predictedPoint);
+        }
+
+        private bool HasGroundAt(Vector2 point)
+        {
+            return _groundTilemap.HasTile(GroundCell(point));
+        }
+
+        private void ConstrainToGround()
+        {
+            if (_groundTilemap == null)
+            {
+                return;
+            }
+
+            Vector2 position = _rigidbody.position;
+
+            if (!_hasGroundPosition)
+            {
+                if (!IsGroundFootprintValid(position))
+                {
+                    float closest = float.PositiveInfinity;
+
+                    foreach (Vector3Int cell
+                             in _groundTilemap.cellBounds.allPositionsWithin)
+                    {
+                        if (!_groundTilemap.HasTile(cell))
+                        {
+                            continue;
+                        }
+
+                        Vector2 center =
+                            _groundTilemap.GetCellCenterWorld(cell);
+
+                        float distance =
+                            (center - position).sqrMagnitude;
+
+                        if (distance >= closest)
+                        {
+                            continue;
+                        }
+
+                        closest = distance;
+                        _lastGroundPosition = center;
+                    }
+
+                    if (float.IsPositiveInfinity(closest))
+                    {
+                        _rigidbody.linearVelocity = Vector2.zero;
+                        return;
+                    }
+                }
+                else
+                {
+                    _lastGroundPosition = position;
+                }
+
+                _hasGroundPosition = true;
+            }
+
+            bool currentHitX;
+            bool currentHitY;
+            Vector2 allowed = ResolveGroundMotion(
+                _lastGroundPosition,
+                position,
+                out currentHitX,
+                out currentHitY);
+
+            if ((allowed - position).sqrMagnitude > 0.000001f)
+            {
+                _rigidbody.position = allowed;
+            }
+
+            _lastGroundPosition = allowed;
+
+            Vector2 next =
+                allowed
+                + _rigidbody.linearVelocity * Time.fixedDeltaTime;
+
+            bool nextHitX;
+            bool nextHitY;
+            ResolveGroundMotion(
+                allowed,
+                next,
+                out nextHitX,
+                out nextHitY);
+
+            Vector2 velocity = _rigidbody.linearVelocity;
+            float restitution = Mathf.Clamp01(_wallRestitution);
+
+            if (currentHitX || nextHitX)
+            {
+                velocity.x = -velocity.x * restitution;
+            }
+
+            if (currentHitY || nextHitY)
+            {
+                velocity.y = -velocity.y * restitution;
+            }
+
+            _rigidbody.linearVelocity = velocity;
+        }
+
+        public void RelocateAirborne(Vector2 position)
+        {
+            if (!IsAirborne || IsCannonFlight)
+            {
+                return;
+            }
+
+            CancelSnap();
+
+            transform.position = position;
+            _rigidbody.position = position;
+            _rigidbody.linearVelocity = Vector2.zero;
+
+            _lastGroundPosition = position;
+            _hasGroundPosition = IsGroundFootprintValid(position);
+        }
 
         public void Drop(Vector3 worldPosition)
         {
@@ -1109,6 +1423,7 @@ namespace SiegeCore.Player
 
             _isSnapping = false;
             _hasSnapTarget = false;
+            _hasGroundPosition = false;
         }
 
         private void NotifyStateChanged()

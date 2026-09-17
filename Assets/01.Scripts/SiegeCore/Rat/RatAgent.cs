@@ -492,14 +492,7 @@ namespace SiegeCore.Rat
                 return;
             }
 
-            transform.position = position;
-
-            Rigidbody2D body = GetComponent<Rigidbody2D>();
-            if (body != null)
-            {
-                body.position = position;
-                body.linearVelocity = Vector2.zero;
-            }
+            _carryable.RelocateAirborne(position);
         }
 
         public bool TryLoadIntoCannon(SiegeCore.Cannon.Cannon cannon)

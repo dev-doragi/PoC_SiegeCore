@@ -589,6 +589,7 @@ namespace SiegeCore.Rat
 
             if (!_carryable.TryMoveOnGround(next))
             {
+                ResetPath();
                 StopMovement();
                 return;
             }
