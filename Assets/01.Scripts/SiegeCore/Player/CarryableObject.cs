@@ -935,12 +935,10 @@ namespace SiegeCore.Player
                 _cannonFlightTime
                 / _cannonFlightDuration);
 
-            Vector2 position = Vector2.Lerp(
+            Vector2 groundPosition = Vector2.Lerp(
                 _cannonStartPosition,
                 _cannonTargetPosition,
                 progress);
-
-            _rigidbody.MovePosition(position);
 
             _height =
                 TrajectoryType == CannonTrajectoryType.Arc
@@ -949,6 +947,11 @@ namespace SiegeCore.Player
                       * progress
                       * (1f - progress)
                     : 0f;
+
+            Vector2 flightPosition = groundPosition
+                + Vector2.up * _height;
+
+            _rigidbody.MovePosition(flightPosition);
 
             if (progress < 1f)
             {
@@ -973,8 +976,9 @@ namespace SiegeCore.Player
             }
 
             _visual.localPosition =
-                _visualRestPosition
-                + Vector3.up * _height;
+                IsCannonFlight
+                    ? _visualRestPosition
+                    : _visualRestPosition + Vector3.up * _height;
 
             if (_shadowTransform == null
                 || _shadowRenderer == null)
@@ -982,9 +986,16 @@ namespace SiegeCore.Player
                 return;
             }
 
+            float shadowY = _shadowOffset.y;
+
+            if (IsCannonFlight)
+            {
+                shadowY -= _height;
+            }
+
             _shadowTransform.localPosition = new Vector3(
                 _shadowOffset.x,
-                _shadowOffset.y,
+                shadowY,
                 0f);
 
             float heightRatio = Mathf.Clamp01(_height / 2f);

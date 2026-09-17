@@ -10,9 +10,6 @@ namespace SiegeCore.Projectile
     [RequireComponent(typeof(Collider2D))]
     public sealed class Projectile : MonoBehaviour
     {
-        [SerializeField, Min(0f)]
-        private float _cancellationHeightDifference = 0.5f;
-
         private RatAgent _agent;
         private CarryableObject _carryable;
 
@@ -71,9 +68,9 @@ namespace SiegeCore.Projectile
             }
 
             /*
-             * ½ÇÁ¦ ºñÇàÀº CarryableObject°¡ ´ã´çÇÑ´Ù.
-             * CarryableObjectÀÇ CannonFlight°¡ ³¡³µ´Ù¸é
-             * ¸ñÀûÁö±îÁö Á¤»ó ºñÇàÀÌ ³¡³­ °ÍÀÌ´Ù.
+             * ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ CarryableObjectï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ñ´ï¿½.
+             * CarryableObjectï¿½ï¿½ CannonFlightï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ù¸ï¿½
+             * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì´ï¿½.
              */
             if (!_carryable.IsCannonFlight)
             {
@@ -139,14 +136,6 @@ namespace SiegeCore.Projectile
                 return;
             }
 
-            float heightDifference =
-                Mathf.Abs(other.Height - Height);
-
-            if (heightDifference > _cancellationHeightDifference)
-            {
-                return;
-            }
-
             Resolve();
             other.Resolve();
         }
@@ -177,8 +166,8 @@ namespace SiegeCore.Projectile
             _isActive = false;
 
             /*
-             * BBB¶ó¸é ¿ø·¡ Faction ±âÁØ Basic RatÀ» ¹èÃâÇÑ´Ù.
-             * RatAgent ³»ºÎ¿¡¼­ Áßº¹ Burst´Â ¹æÁöÇÑ´Ù.
+             * BBBï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Faction ï¿½ï¿½ï¿½ï¿½ Basic Ratï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ñ´ï¿½.
+             * RatAgent ï¿½ï¿½ï¿½Î¿ï¿½ï¿½ï¿½ ï¿½ßºï¿½ Burstï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ñ´ï¿½.
              */
             _agent.TryBurstContents();
 

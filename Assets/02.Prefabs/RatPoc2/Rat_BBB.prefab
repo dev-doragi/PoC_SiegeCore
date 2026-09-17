@@ -202,7 +202,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3f17a998c9d840f9a91f08167a2f9642, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Projectile.Projectile
-  _cancellationHeightDifference: 0.5
 --- !u!1 &716857175879155650
 GameObject:
   m_ObjectHideFlags: 0

@@ -78,7 +78,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 1888895783
-  m_SortingLayer: 3
+  m_SortingLayer: 2
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 7e7a872576f4dbf498c9bc590f403905, type: 3}
@@ -314,8 +314,8 @@ MonoBehaviour:
   _maxLoadCount: 3
   _trajectoryType: 1
   _fireInterval: 1.5
-  _projectileFlightDuration: 3
-  _projectileArcHeight: 10
+  _projectileFlightDuration: 6
+  _projectileArcHeight: 12
   _carriedScale: {x: 1, y: 1, z: 1}
   _carryTweenDuration: 0.2
   _slotSearchRadius: 1

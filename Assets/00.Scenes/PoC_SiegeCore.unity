@@ -1996,7 +1996,7 @@ MonoBehaviour:
   _factory: {fileID: 501205960}
   _faction: 1
   _outlet: {fileID: 1158331593}
-  _spawnInterval: 3
+  _spawnInterval: 8
   _ejectDirection: {x: -2, y: 0}
   _ejectSpeed: 2
 --- !u!4 &1158331593
@@ -9361,7 +9361,7 @@ MonoBehaviour:
   _factory: {fileID: 501205960}
   _faction: 0
   _outlet: {fileID: 1777149721}
-  _spawnInterval: 3
+  _spawnInterval: 8
   _ejectDirection: {x: 2, y: 0}
   _ejectSpeed: 2
 --- !u!1 &1807365966
