@@ -6,9 +6,7 @@ namespace SiegeCore.Player
     {
         Transform CarryTransform { get; }
         bool IsCarried { get; }
-        bool CanBePickedUp { get; }
 
-        bool TryPickUp(Transform carryPoint);
         void Drop(Vector3 worldPosition);
     }
 }

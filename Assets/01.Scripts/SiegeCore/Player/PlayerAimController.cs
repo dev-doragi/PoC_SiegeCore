@@ -21,6 +21,19 @@ namespace SiegeCore.Player
 
         public int FacingSign => AimDirection.x >= 0f ? 1 : -1;
         public bool IsFacingLeft => FacingSign < 0;
+        public Vector2 EightWayAimDirection => SnapToEightDirections(AimDirection);
+
+        public static Vector2 SnapToEightDirections(Vector2 direction)
+        {
+            if (direction.sqrMagnitude < 0.0001f)
+            {
+                return Vector2.right;
+            }
+
+            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+            float snappedAngle = Mathf.Round(angle / 45f) * 45f * Mathf.Deg2Rad;
+            return new Vector2(Mathf.Cos(snappedAngle), Mathf.Sin(snappedAngle));
+        }
 
         private void OnEnable()
         {

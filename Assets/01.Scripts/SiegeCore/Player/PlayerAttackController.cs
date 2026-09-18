@@ -22,15 +22,11 @@ namespace SiegeCore.Player
             [SerializeField, Min(0f), Tooltip("가상 Height에 적용할 초기 상승 속도입니다.")]
             private float _verticalSpeed = 6f;
 
-            [SerializeField, Min(0f), Tooltip("발사 후 머리로 받을 수 없게 막는 시간입니다.")]
-            private float _catchLockDuration = 0.2f;
-
             [SerializeField, Min(0f), Tooltip("연쇄 합성을 계속할 수 있는 최소 수평 속도입니다. 일반 공격에서는 사용하지 않습니다.")]
             private float _collisionFusionMinimumSpeed = 3f;
 
             public float HorizontalSpeed { get { return Mathf.Max(0f, _horizontalSpeed); } }
             public float VerticalSpeed { get { return Mathf.Max(0f, _verticalSpeed); } }
-            public float CatchLockDuration { get { return Mathf.Max(0f, _catchLockDuration); } }
             public float CollisionFusionMinimumSpeed
             {
                 get { return Mathf.Max(0f, _collisionFusionMinimumSpeed); }
@@ -39,12 +35,10 @@ namespace SiegeCore.Player
             public BatFlightProfile(
                 float horizontalSpeed,
                 float verticalSpeed,
-                float catchLockDuration,
                 float collisionFusionMinimumSpeed)
             {
                 _horizontalSpeed = horizontalSpeed;
                 _verticalSpeed = verticalSpeed;
-                _catchLockDuration = catchLockDuration;
                 _collisionFusionMinimumSpeed = collisionFusionMinimumSpeed;
             }
         }
@@ -97,18 +91,18 @@ namespace SiegeCore.Player
         [Header("Normal Attack Flight")]
         [SerializeField, Tooltip("최소 차지 이상, 풀차지 미만 공격에 사용하는 고정 비행 설정입니다.")]
         private BatFlightProfile _normalAttackProfile =
-            new BatFlightProfile(0.6f, 12f, 0.2f, 0f);
+            new BatFlightProfile(0.6f, 12f, 0f);
+
+        [SerializeField, Min(1), Tooltip("일반 Popup이 8방향으로 이동할 목표 타일 수입니다.")]
+        private int _normalPopupCellDistance = 1;
 
         [Header("Full Charge Flight")]
         [SerializeField, Tooltip("풀차지 공격의 장거리 비행과 연쇄 합성 설정입니다.")]
         private BatFlightProfile _fullChargeProfile =
-            new BatFlightProfile(20f, 1.5f, 0.8f, 3f);
+            new BatFlightProfile(20f, 1.5f, 3f);
 
         [SerializeField, Range(0.1f, 1f), Tooltip("풀차지 중 유지되는 플레이어 이동 속도 비율입니다.")]
         private float _fullChargeMovementMultiplier = 0.25f;
-
-        [SerializeField, Range(0f, 20f), Tooltip("여러 Rat을 맞힐 때 가장자리에 적용할 최대 퍼짐 각도입니다.")]
-        private float _maximumSpreadAngle = 7f;
 
         [Header("Charge Debug")]
         [SerializeField, Tooltip("차지 진행도와 발사 결과를 Console에 표시합니다.")]
@@ -279,7 +273,7 @@ namespace SiegeCore.Player
 
         private void PerformSwing(float chargeRatio)
         {
-            Vector2 aimDirection = _aimController.AimDirection;
+            Vector2 aimDirection = _aimController.EightWayAimDirection;
             CollectTargets(aimDirection, chargeRatio);
 
             bool isFullCharge = chargeRatio >= _fullChargeThreshold;
@@ -322,17 +316,16 @@ namespace SiegeCore.Player
                     }
                 }
 
-                Vector2 launchDirection = GetLaunchDirection(rat, aimDirection, chargeRatio);
                 float verticalSpeed = flightProfile.VerticalSpeed;
                 if (!isFullCharge && rat.Definition != null)
                 {
                     verticalSpeed *= rat.Definition.VerticalImpulseMultiplier;
                 }
                 rat.LaunchFromBat(
-                    launchDirection,
+                    aimDirection,
                     speed,
                     verticalSpeed,
-                    flightProfile.CatchLockDuration,
+                    isFullCharge ? 0 : _normalPopupCellDistance,
                     flightProfile.CollisionFusionMinimumSpeed,
                     swingId,
                     isFullCharge,
@@ -386,27 +379,9 @@ namespace SiegeCore.Player
             return hit.collider == null;
         }
 
-        private Vector2 GetLaunchDirection(
-            RatAgent rat,
-            Vector2 aimDirection,
-            float chargeRatio)
-        {
-            if (_targets.Count <= 1 || _maximumSpreadAngle <= 0f)
-            {
-                return aimDirection;
-            }
-
-            Vector2 offset = (Vector2)rat.transform.position - (Vector2)transform.position;
-            float signedAngle = Vector2.SignedAngle(aimDirection, offset.normalized);
-            float halfAngle = Mathf.Max(0.5f, GetAttackAngle(chargeRatio) * 0.5f);
-            float normalizedOffset = Mathf.Clamp(signedAngle / halfAngle, -1f, 1f);
-            float spreadAngle = normalizedOffset * _maximumSpreadAngle;
-            return Quaternion.Euler(0f, 0f, spreadAngle) * aimDirection;
-        }
-
         private void UpdatePreview()
         {
-            Vector2 aimDirection = _aimController.AimDirection;
+            Vector2 aimDirection = _aimController.EightWayAimDirection;
             CollectTargets(aimDirection, ChargeRatio);
             if (_chargePreview != null)
             {
@@ -584,7 +559,7 @@ namespace SiegeCore.Player
             PlayerAimController aimController = GetComponent<PlayerAimController>();
             if (Application.isPlaying && aimController != null)
             {
-                direction = aimController.AimDirection;
+                direction = aimController.EightWayAimDirection;
             }
 
             float gizmoCharge = 0f;

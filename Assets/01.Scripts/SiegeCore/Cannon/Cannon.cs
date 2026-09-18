@@ -52,7 +52,6 @@ namespace SiegeCore.Cannon
         private Collider2D[] _ignoredColliders;
         private CannonSlot _pendingInstallSlot;
         private bool _isThrown;
-        private bool _isSettling;
         private float _height;
         private float _verticalSpeed;
 
@@ -60,10 +59,6 @@ namespace SiegeCore.Cannon
         public event System.Action<IThrowable> GroundSortingRequested;
         public Transform CarryTransform { get { return transform; } }
         public bool IsCarried { get { return State == CannonState.Carried; } }
-        public bool CanBePickedUp
-        {
-            get { return State != CannonState.Carried && !_isThrown && !_isSettling && isActiveAndEnabled; }
-        }
         public int LoadedCount
         {
             get
@@ -272,22 +267,6 @@ namespace SiegeCore.Cannon
             }
         }
 
-        public bool TryPickUp(Transform carryPoint)
-        {
-            if (!CanBePickedUp || carryPoint == null) return false;
-
-            StopFiring();
-            RestoreIgnoredCollisions();
-            _sourceSlot = null;
-            State = CannonState.Carried;
-            _worldParent = transform.parent;
-            KillCarryTweens();
-            transform.SetParent(carryPoint, true);
-            _carryTween = transform.DOLocalMove(Vector3.zero, Mathf.Max(0.01f, _carryTweenDuration));
-            _scaleTween = transform.DOScale(_carriedScale, Mathf.Max(0.01f, _carryTweenDuration));
-            return true;
-        }
-
         public void Drop(Vector3 worldPosition)
         {
             if (State != CannonState.Carried) return;
@@ -384,7 +363,6 @@ namespace SiegeCore.Cannon
             Vector3Int cellPosition = _groundTilemap.WorldToCell(transform.position);
             if (!_groundTilemap.HasTile(cellPosition)) return;
             Vector3 targetPosition = _groundTilemap.GetCellCenterWorld(cellPosition);
-            _isSettling = true;
             _carryTween = transform.DOMove(targetPosition, Mathf.Max(0.01f, _carryTweenDuration))
                 .OnComplete(FinishGroundSettling);
         }
@@ -404,7 +382,6 @@ namespace SiegeCore.Cannon
             Vector3 rootOffset = transform.position - _storagePoint.position;
             Vector3 targetPosition = slotPosition + rootOffset;
             _pendingInstallSlot = slot;
-            _isSettling = true;
             _carryTween = transform.DOMove(targetPosition, Mathf.Max(0.01f, _carryTweenDuration))
                 .OnComplete(FinishThrownInstallation);
             return true;
@@ -412,12 +389,10 @@ namespace SiegeCore.Cannon
 
         private void FinishGroundSettling()
         {
-            _isSettling = false;
         }
 
         private void FinishThrownInstallation()
         {
-            _isSettling = false;
             CannonSlot slot = _pendingInstallSlot;
             _pendingInstallSlot = null;
 

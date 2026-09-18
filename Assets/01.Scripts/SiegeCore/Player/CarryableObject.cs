@@ -37,6 +37,8 @@ namespace SiegeCore.Player
         [Header("Throw")]
         [SerializeField, Min(0f)] private float _throwSpeed = 5.5f;
         [SerializeField, Min(0f)] private float _upwardSpeed = 4f;
+        [SerializeField, Min(1), Tooltip("머리 위에서 던질 때 이동할 8방향 타일 수입니다.")]
+        private int _throwCellDistance = 2;
         [SerializeField, Min(0.01f)] private float _heightGravity = 16f;
         [SerializeField, Range(0f, 0.9f)] private float _bounceRestitution = 0.45f;
         [SerializeField, Range(0f, 1f)] private float _groundSpeedRetention = 0.65f;
@@ -103,15 +105,14 @@ namespace SiegeCore.Player
 
         private float _height;
         private float _verticalSpeed;
+        private float _peakHeight;
+        private bool _hasReachedPeak;
 
         private Vector2 _snapTarget;
         private bool _hasSnapTarget;
         private bool _isSnapping;
         private Tween _snapTween;
-        private CarryController _catchOwner;
-        private Transform _catchPoint;
-        private float _catchSteeringSpeed;
-        private float _catchSteeringAcceleration;
+        private Tween _catchTween;
 
         private Vector2 _lastGroundPosition;
         private bool _hasGroundPosition;
@@ -126,7 +127,6 @@ namespace SiegeCore.Player
         private Transform _batReturnTarget = null;
         private Coroutine _impactRoutine;
         private Vector2 _velocityBeforePhysicsStep = Vector2.zero;
-        private float _catchAllowedAt = 0f;
 
         private static readonly HashSet<CarryableObject> ActiveItems =
             new HashSet<CarryableObject>();
@@ -156,15 +156,26 @@ namespace SiegeCore.Player
         public bool IsCannonFlight { get; private set; }
         public bool IsHitStopped { get { return _isHitStopped; } }
         public bool IsFusionLocked { get { return _fusionLocked; } }
+        public bool IsDescending { get { return IsAirborne && _verticalSpeed <= 0f; } }
+        public float FallDistanceFromPeak => _hasReachedPeak
+            ? Mathf.Max(0f, _peakHeight - _height)
+            : 0f;
         public bool CanBeCaughtInFlight
         {
             get
             {
-                return IsAirborne
-                    && Time.time >= _catchAllowedAt
-                    && _verticalSpeed <= 0f
-                    && !_isHitStopped
-                    && !_fusionLocked && !_isSnapping && !IsCannonFlight;
+                if (!IsAirborne || !IsDescending || IsCannonFlight)
+                {
+                    return false;
+                }
+
+                // Full charge remains a transport/fusion route until its wall-return popup begins.
+                if (_batFlightPhase == BatFlightPhase.FullChargeRoute)
+                {
+                    return false;
+                }
+
+                return !_isHitStopped && !_fusionLocked && !_isSnapping;
             }
         }
 
@@ -185,31 +196,21 @@ namespace SiegeCore.Player
             }
         }
 
-        public Transform CarryTransform
-        {
-            get { return transform; }
-        }
-
-        public bool CanBePickedUp
+        public Vector2 CatchVisualPosition
         {
             get
             {
-                if (!isActiveAndEnabled
-                    || IsCarried
-                    || IsAirborne
-                    || IsLoaded
-                    || IsCannonFlight)
-                {
-                    return false;
-                }
-
-                if (_rat != null)
-                {
-                    return _rat.CanPickUp;
-                }
-
-                return true;
+                if (_visual == null) return transform.position;
+                Vector3 visualLocalPosition = IsAirborne
+                    ? _visualRestPosition + Vector3.up * _height
+                    : _visualRestPosition;
+                return transform.TransformPoint(visualLocalPosition);
             }
+        }
+
+        public Transform CarryTransform
+        {
+            get { return transform; }
         }
 
         public bool CanEnterCannon
@@ -311,9 +312,9 @@ namespace SiegeCore.Player
             // 단계별 비행 감속은 현재 사용하지 않는다.
             // B, BB, BBB 모두 같은 수평 속도를 유지한다.
             // ApplyRankFlightDeceleration();
-            if (UpdateCatchAssist()) return;
             UpdateThrowFlight();
             if (!IsAirborne) return;
+            UpdateCatchArc();
             _velocityBeforePhysicsStep = _rigidbody.linearVelocity;
             if (TryHandleCollisionFusionOverlap())
             {
@@ -335,6 +336,7 @@ namespace SiegeCore.Player
         public void ResetForRat(Tilemap groundTilemap)
         {
             CancelSnap();
+            CompleteCatchTween();
             ResetBatFlightState();
             RestoreThrowerCollisions();
 
@@ -363,12 +365,13 @@ namespace SiegeCore.Player
         }
 
         // --------------------------------------------------------------------
-        // Pickup
+        // Internal carry-slot attachment (for fusion replacement)
         // --------------------------------------------------------------------
 
-        public bool TryPickUp(Transform holdPoint)
+        internal bool TryAttachToCarrySlot(Transform holdPoint)
         {
-            if (!CanBePickedUp
+            if (!isActiveAndEnabled || IsCarried || IsAirborne || IsLoaded || IsCannonFlight
+                || (_rat != null && !_rat.CanPickUp)
                 || holdPoint == null
                 || holdPoint.IsChildOf(transform))
             {
@@ -416,6 +419,7 @@ namespace SiegeCore.Player
             }
 
             CancelSnap();
+            CompleteCatchTween();
             RestoreThrowerCollisions();
 
             float initialHeight =
@@ -432,6 +436,7 @@ namespace SiegeCore.Player
 
             _height = initialHeight;
             _verticalSpeed = _upwardSpeed;
+            BeginCatchArc();
 
             _rigidbody.bodyType = RigidbodyType2D.Dynamic;
             _rigidbody.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
@@ -450,8 +455,10 @@ namespace SiegeCore.Player
             // 실제 Throw impulse를 마지막에 적용합니다.
             NotifyStateChanged();
 
-            _rigidbody.linearVelocity =
-                direction.normalized * _throwSpeed;
+            if (!TrySetGridLandingVelocity(direction, _throwCellDistance))
+            {
+                _rigidbody.linearVelocity = direction.normalized * _throwSpeed;
+            }
 
             return true;
         }
@@ -548,7 +555,7 @@ namespace SiegeCore.Player
             Vector2 direction,
             float horizontalSpeed,
             float verticalSpeed,
-            float catchLockDuration,
+            int landingCellDistance,
             float collisionFusionMinimumSpeed,
             int swingId,
             bool isFullCharge,
@@ -569,7 +576,7 @@ namespace SiegeCore.Player
                 Mathf.Max(0f, collisionFusionMinimumSpeed);
             _batReturnTarget = returnTarget;
             _verticalSpeed = Mathf.Max(0f, verticalSpeed);
-            _catchAllowedAt = Time.time + Mathf.Max(0f, catchLockDuration);
+            BeginCatchArc();
 
             if (isFullCharge)
             {
@@ -581,6 +588,7 @@ namespace SiegeCore.Player
             else
             {
                 _batFlightPhase = BatFlightPhase.NormalKnockback;
+                TrySetGridLandingVelocity(direction, landingCellDistance);
             }
 
             return true;
@@ -589,12 +597,13 @@ namespace SiegeCore.Player
         public float HeightGravity { get { return _heightGravity; } }
 
         /// <summary>Airborne Rat을 머리 슬롯에 붙이는 전용 경로다.</summary>
-        internal bool TryCatch(Transform holdPoint)
+        internal bool TryCatch(Transform holdPoint, float duration)
         {
             if (_rat == null || !_rat.CanBeCaught
                 || _fusionLocked || holdPoint == null || holdPoint.IsChildOf(transform)) return false;
             CancelSnap();
             ResetBatFlightState();
+            Vector3 displayedWorldPosition = _visual != null ? _visual.position : transform.position;
             _worldParent = transform.parent;
             IsCarried = true;
             IsAirborne = false;
@@ -605,56 +614,24 @@ namespace SiegeCore.Player
             _verticalSpeed = 0f;
             _rigidbody.linearVelocity = Vector2.zero;
             _rigidbody.simulated = false;
-            transform.SetParent(holdPoint, false);
-            transform.localPosition = Vector3.zero;
+            transform.SetParent(holdPoint, true);
             ResetVisualHeight();
+            Vector3 displayOffset = displayedWorldPosition
+                - (_visual != null ? _visual.position : transform.position);
+            transform.position += displayOffset;
+            _catchTween = transform.DOLocalMove(Vector3.zero, Mathf.Max(0.01f, duration))
+                .SetEase(Ease.OutCubic)
+                .OnComplete(() =>
+                {
+                    _catchTween = null;
+                    transform.localPosition = Vector3.zero;
+                });
             NotifyStateChanged();
             return true;
         }
 
         public Transform CarryVisual => _visual;
         public Vector3 CarryVisualRestScale => _visualRestScale;
-        public bool IsCatchAssisted => _catchOwner != null;
-        internal bool HasCatchAssist(CarryController owner) => _catchOwner == owner;
-
-        internal void BeginCatchAssist(CarryController owner, Transform point, float speed, float acceleration)
-        {
-            if (IsCatchAssisted || _rat == null || !_rat.CanBeCaught) return;
-            _catchOwner = owner;
-            _catchPoint = point;
-            _catchSteeringSpeed = speed;
-            _catchSteeringAcceleration = acceleration;
-        }
-
-        internal void CancelCatchAssist(CarryController owner)
-        {
-            if (_catchOwner != owner) return;
-            _catchOwner = null;
-            _catchPoint = null;
-        }
-
-        // Height follows gravity throughout assist; only the ground-plane velocity is steered.
-        private bool UpdateCatchAssist()
-        {
-            if (_catchOwner == null) return false;
-            CarryController owner = _catchOwner;
-            Transform point = _catchPoint;
-            if (_rat == null || !_rat.CanBeCaught || !owner.IsCatchReservationValid(this, point))
-            {
-                CancelCatchAssist(owner);
-                return false;
-            }
-            Vector2 offset = owner.GetCatchGroundPosition() - PhysicsPosition;
-            Vector2 desiredVelocity = Vector2.ClampMagnitude(
-                offset.normalized * _catchSteeringSpeed, _catchSteeringSpeed);
-            _rigidbody.linearVelocity = Vector2.MoveTowards(_rigidbody.linearVelocity,
-                desiredVelocity, _catchSteeringAcceleration * Time.fixedDeltaTime);
-            Vector2 contactPosition = PhysicsPosition;
-            if (!owner.IsInsideCatchArea(contactPosition, owner.AirborneCatchRadius)) return false;
-            bool caught = owner.TryCompleteCatch(this, point, contactPosition);
-            if (!caught) CancelCatchAssist(owner);
-            return caught;
-        }
         /// <summary>
         /// 충돌 합성 결과를 원본 Rat의 방향과 속도로 계속 비행시킨다.
         /// 벽 팝업 전에는 풀차지 비행 문맥도 전달해 다음 Rat과 연쇄 합성할 수 있게 한다.
@@ -665,7 +642,6 @@ namespace SiegeCore.Player
             float height,
             float verticalSpeed,
             Vector2 velocity,
-            float catchAllowedAt,
             int swingId,
             float collisionFusionMinimumSpeed,
             Transform returnTarget)
@@ -685,7 +661,7 @@ namespace SiegeCore.Player
             IsAirborne = true;
             _height = Mathf.Max(0f, height);
             _verticalSpeed = verticalSpeed;
-            _catchAllowedAt = Mathf.Max(Time.time, catchAllowedAt);
+            BeginCatchArc();
             _batSwingId = swingId;
             _batReturnTarget = returnTarget;
             _batFlightPhase = BatFlightPhase.FullChargeRoute;
@@ -723,6 +699,7 @@ namespace SiegeCore.Player
 
             _height = Mathf.Max(0f, initialHeight);
             _verticalSpeed = 0f;
+            BeginCatchArc();
 
             _rigidbody.bodyType = RigidbodyType2D.Dynamic;
             _rigidbody.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
@@ -733,6 +710,57 @@ namespace SiegeCore.Player
             _collider.sharedMaterial = _flightMaterial;
 
             NotifyStateChanged();
+        }
+
+        private void BeginCatchArc()
+        {
+            float gravity = Mathf.Max(0.01f, _heightGravity);
+            float upwardSpeed = Mathf.Max(0f, _verticalSpeed);
+            _peakHeight = _height + upwardSpeed * upwardSpeed / (2f * gravity);
+            _hasReachedPeak = _verticalSpeed <= 0f;
+        }
+
+        private void UpdateCatchArc()
+        {
+            if (!_hasReachedPeak && _verticalSpeed <= 0f)
+            {
+                _hasReachedPeak = true;
+            }
+        }
+
+        private bool TrySetGridLandingVelocity(Vector2 direction, int cellDistance)
+        {
+            if (_groundTilemap == null || cellDistance <= 0)
+            {
+                return false;
+            }
+
+            Vector3Int cellDirection = new Vector3Int(
+                Mathf.RoundToInt(direction.x),
+                Mathf.RoundToInt(direction.y),
+                0);
+            if (cellDirection == Vector3Int.zero)
+            {
+                return false;
+            }
+
+            Vector3Int startCell = _groundTilemap.WorldToCell(PhysicsPosition);
+            Vector3Int targetCell = startCell + cellDirection * cellDistance;
+            Vector2 targetPosition = _groundTilemap.GetCellCenterWorld(targetCell);
+            targetPosition = FindNearestValidGroundPosition(_groundTilemap, targetPosition);
+
+            float gravity = Mathf.Max(0.01f, _heightGravity);
+            float impactSpeed = Mathf.Sqrt(
+                _verticalSpeed * _verticalSpeed + 2f * gravity * Mathf.Max(0f, _height));
+            float flightTime = (_verticalSpeed + impactSpeed) / gravity;
+            if (flightTime <= 0.001f)
+            {
+                return false;
+            }
+
+            _rigidbody.linearVelocity = (targetPosition - PhysicsPosition) / flightTime;
+            _velocityBeforePhysicsStep = _rigidbody.linearVelocity;
+            return true;
         }
 
         // --------------------------------------------------------------------
@@ -805,7 +833,7 @@ namespace SiegeCore.Player
                 }
             }
 
-            if (_hasSnapTarget && !IsCatchAssisted)
+            if (_hasSnapTarget)
             {
                 SteerTowardSnapTarget();
             }
@@ -1459,6 +1487,7 @@ namespace SiegeCore.Player
                 popupVerticalSpeed *= _rat.Definition.VerticalImpulseMultiplier;
             }
             _verticalSpeed = popupVerticalSpeed;
+            BeginCatchArc();
 
             if (_batReturnTarget == null)
             {
@@ -1512,6 +1541,7 @@ namespace SiegeCore.Player
                 return;
             }
 
+            CompleteCatchTween();
             transform.SetParent(_worldParent, true);
             transform.position = worldPosition;
             _rigidbody.position = worldPosition;
@@ -1920,7 +1950,6 @@ namespace SiegeCore.Player
             Vector2 preservedVelocity = _rigidbody.linearVelocity;
             float preservedHeight = _height;
             float preservedVerticalSpeed = _verticalSpeed;
-            float preservedCatchAllowedAt = _catchAllowedAt;
             int preservedSwingId = _batSwingId;
             float preservedFusionMinimumSpeed =
                 _collisionFusionMinimumSpeedForFlight;
@@ -1949,7 +1978,6 @@ namespace SiegeCore.Player
                 preservedHeight,
                 preservedVerticalSpeed,
                 preservedVelocity,
-                preservedCatchAllowedAt,
                 preservedSwingId,
                 preservedFusionMinimumSpeed,
                 preservedReturnTarget);
@@ -2074,7 +2102,6 @@ namespace SiegeCore.Player
 
         private void ResetBatFlightState()
         {
-            CancelCatchAssist(_catchOwner);
             if (_impactRoutine != null)
             {
                 StopCoroutine(_impactRoutine);
@@ -2098,7 +2125,6 @@ namespace SiegeCore.Player
             _collisionFusionMinimumSpeedForFlight = 0f;
             _batReturnTarget = null;
             _velocityBeforePhysicsStep = Vector2.zero;
-            _catchAllowedAt = 0f;
             ResetVisualScale();
         }
 
@@ -2157,6 +2183,7 @@ namespace SiegeCore.Player
                 return false;
             }
 
+            CompleteCatchTween();
             transform.SetParent(destination, true);
             transform.localPosition = Vector3.zero;
 
@@ -2226,6 +2253,14 @@ namespace SiegeCore.Player
 
         }
 
+        private void CompleteCatchTween()
+        {
+            if (_catchTween == null) return;
+            _catchTween.Kill();
+            _catchTween = null;
+            if (IsCarried) transform.localPosition = Vector3.zero;
+        }
+
         private void NotifyStateChanged()
         {
             StateChanged?.Invoke();
@@ -2235,6 +2270,7 @@ namespace SiegeCore.Player
         {
             GroundSortingRequested?.Invoke(this);
             CancelSnap();
+            CompleteCatchTween();
             ResetBatFlightState();
             RestoreThrowerCollisions();
             ActiveItems.Remove(this);
@@ -2250,6 +2286,7 @@ namespace SiegeCore.Player
         private void OnDestroy()
         {
             CancelSnap();
+            CompleteCatchTween();
             RestoreThrowerCollisions();
 
             if (_flightMaterial != null)

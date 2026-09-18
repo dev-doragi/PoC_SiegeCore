@@ -423,7 +423,7 @@ namespace SiegeCore.Rat
             Vector2 direction,
             float horizontalSpeed,
             float verticalSpeed,
-            float catchLockDuration,
+            int landingCellDistance,
             float collisionFusionMinimumSpeed,
             int swingId,
             bool isFullCharge,
@@ -464,7 +464,7 @@ namespace SiegeCore.Rat
                 direction.normalized,
                 horizontalSpeed,
                 verticalSpeed,
-                catchLockDuration,
+                landingCellDistance,
                 collisionFusionMinimumSpeed,
                 swingId,
                 isFullCharge,
@@ -486,7 +486,6 @@ namespace SiegeCore.Rat
             float height,
             float verticalSpeed,
             Vector2 velocity,
-            float catchAllowedAt,
             int swingId,
             float collisionFusionMinimumSpeed,
             Transform returnTarget)
@@ -509,7 +508,6 @@ namespace SiegeCore.Rat
                 height,
                 verticalSpeed,
                 velocity,
-                catchAllowedAt,
                 swingId,
                 collisionFusionMinimumSpeed,
                 returnTarget);

@@ -66,8 +66,8 @@ namespace SiegeCore.Rat
         {
             get
             {
-                if (WeightRank == RatWeightRank.Medium) return 0.85f;
-                if (WeightRank == RatWeightRank.Heavy) return 0.7f;
+                if (WeightRank == RatWeightRank.Medium) return 0.95f;
+                if (WeightRank == RatWeightRank.Heavy) return 0.8f;
                 return 1f;
             }
         }

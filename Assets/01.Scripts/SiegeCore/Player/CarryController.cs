@@ -20,24 +20,33 @@ namespace SiegeCore.Player
 
         [SerializeField] private CarryStackAnimator _stackAnimator;
 
-        [Header("Airborne Catch")]
-        [SerializeField, Min(0.1f), Tooltip("지상 Rat을 직접 줍는 반경입니다.")]
-        private float _pickupRadius = 0.55f;
+        [SerializeField, Tooltip("공중 Catch 범위의 중심입니다. 플레이어 발 위치에 둡니다.")]
+        private Transform _catchOrigin;
 
-        [SerializeField, Min(0.1f), Tooltip("하강 중 Rat의 지면 투영 위치를 받는 Player Catch Area 반경입니다.")]
-        private float _airborneCatchRadius = 0.5f;
+        [Header("Airborne Catch - Eligibility")]
+        [SerializeField, Min(0f), Tooltip("Peak 이후 Catch 판정을 시작하기 전에 Rat이 실제로 낙하해야 하는 높이입니다.")]
+        private float _minimumCatchFallDistance = 0.4f;
 
-        [SerializeField, Min(0f), Tooltip("공중 Rat을 머리에 받는 순간 플레이어 이동을 잠그는 시간입니다.")]
-        private float _catchMovementLockDuration = 0.1f;
+        [Header("Airborne Catch - Area")]
+        [SerializeField, Min(0.1f), Tooltip("Catch Area의 좌우 반경입니다.")]
+        private float _catchHorizontalRadius = 0.85f;
 
-        [SerializeField, Min(0.1f), Tooltip("Catch Area 바로 밖에서 약한 조향을 시작하는 반경입니다.")]
-        private float _catchAssistRadius = 0.85f;
-        [SerializeField, Range(0.1f, 1f), Tooltip("화면 원근에 맞춘 Catch Area 세로 비율입니다.")]
-        private float _catchAreaVerticalScale = 0.65f;
-        [SerializeField, Min(0f)] private float _catchAssistSpeed = 2f;
-        [SerializeField, Min(0f)] private float _catchAssistAcceleration = 12f;
-        [SerializeField] private LayerMask _pickupLayers = ~0;
-        [SerializeField] private LayerMask _obstacleLayers = ~0;
+        [SerializeField, Min(0.1f), Tooltip("Catch Area의 위아래 반경입니다.")]
+        private float _catchVerticalRadius = 0.55f;
+
+        [SerializeField, Tooltip("CatchOrigin을 기준으로 Catch Area 중심을 이동합니다.")]
+        private Vector2 _catchAreaOffset = Vector2.zero;
+
+        [Header("Airborne Catch - Response")]
+        [SerializeField, Min(0.01f), Tooltip("Catch된 Rat이 현재 공중 위치에서 HoldPoint까지 이동하는 시간입니다.")]
+        private float _catchTweenDuration = 0.12f;
+
+        [SerializeField, Range(0f, 0.3f), Tooltip("Catch 순간 플레이어와 운반 스택이 눌리는 강도입니다.")]
+        private float _catchSquashStrength = 0.08f;
+
+        private const float CatchMovementLockDuration = 0.1f;
+
+        [Header("Interaction")]
         [SerializeField, Min(0.01f)] private float _throwMovementLockDuration = 0.2f;
 
         [Header("Enemy Recovery")]
@@ -53,10 +62,6 @@ namespace SiegeCore.Player
         private Vector3 _holdOffset;
         private readonly List<ICarryable> _heldObjects = new List<ICarryable>();
         private readonly Dictionary<ICarryable, CarrySorting> _carrySorting = new Dictionary<ICarryable, CarrySorting>();
-        private CarryableObject _catchCandidate;
-        private Transform _reservedPoint;
-        private int _reservedCount;
-        private readonly HashSet<CarryableObject> _catchBlockedUntilExit = new HashSet<CarryableObject>();
         private int _carriedLayerId;
         private bool _handlingEnemyRecovery;
 
@@ -81,14 +86,14 @@ namespace SiegeCore.Player
             }
         }
         public PlayerController Player => _player;
-        internal float AirborneCatchRadius => Mathf.Max(0.1f, _airborneCatchRadius);
         public bool InteractionLocked { get; set; }
         public ICarryable GetHeld(int index) => index >= 0 && index < HeldCount ? _heldObjects[index] : null;
 
         public bool ReplaceTopPair(SiegeCore.Rat.RatAgent result)
         {
             int count = HeldCount;
-            if (count < 2 || result == null || !result.Carryable.TryPickUp(GetHoldPoint(count - 2))) { return false; }
+            if (count < 2 || result == null
+                || !result.Carryable.TryAttachToCarrySlot(GetHoldPoint(count - 2))) return false;
             for (int index = count - 1; index >= count - 2; index--)
             {
                 ICarryable item = _heldObjects[index];
@@ -131,7 +136,6 @@ namespace SiegeCore.Player
                 EventBus.Instance.Unsubscribe<SecondaryActionInputEvent>(HandleSecondaryAction);
             }
             DropAll();
-            _catchBlockedUntilExit.Clear();
             // Also restore objects still in their initial airborne arc.
             List<ICarryable> pending = new List<ICarryable>(_carrySorting.Keys);
             foreach (ICarryable item in pending) RestoreCarrySorting(item);
@@ -165,97 +169,61 @@ namespace SiegeCore.Player
 
         private void FixedUpdate()
         {
-            _catchBlockedUntilExit.RemoveWhere(item => item == null || !item.IsAirborne);
             if (Time.timeScale <= 0f) return;
             int count = HeldCount;
             Transform point = GetHoldPoint(count);
             if (InteractionLocked || count >= GetCarryCapacity() || point == null
                 || (count > 0 && _heldObjects[0] is SiegeCore.Cannon.Cannon))
             {
-                CancelCatchReservation();
                 return;
-            }
-
-            if (_catchCandidate != null)
-            {
-                if (IsCatchReservationValid(_catchCandidate, _reservedPoint)
-                    && _catchCandidate.HasCatchAssist(this)) return;
-                CancelCatchReservation();
             }
 
             CarryableObject best = null;
             float bestDistance = float.PositiveInfinity;
-            Vector2 groundTarget = GetCatchGroundPosition();
+            Vector2 catchAreaCenter = GetCatchAreaCenter();
             foreach (RatAgent rat in RatAgent.Active)
             {
                 if (rat == null) continue;
                 CarryableObject item = rat.Carryable;
-                float distance = Vector2.Distance(item.PhysicsPosition, groundTarget);
-                if (_catchBlockedUntilExit.Contains(item))
-                {
-                    if (!IsInsideCatchArea(item.PhysicsPosition,
-                        Mathf.Max(_catchAssistRadius, _airborneCatchRadius)))
-                        _catchBlockedUntilExit.Remove(item);
-                    continue;
-                }
-                if (!rat.CanBeCaught || item.IsCatchAssisted) continue;
-                if (!IsInsideCatchArea(item.PhysicsPosition, _catchAssistRadius)
+                Vector2 visualPosition = item.CatchVisualPosition;
+                float distance = Vector2.Distance(visualPosition, catchAreaCenter);
+                if (!rat.CanBeCaught
+                    || item.FallDistanceFromPeak < _minimumCatchFallDistance) continue;
+                if (!IsInsideCatchArea(visualPosition)
                     || distance >= bestDistance) continue;
                 best = item;
                 bestDistance = distance;
             }
             if (best == null) return;
-            _catchCandidate = best;
-            _reservedPoint = point;
-            _reservedCount = count;
-            best.BeginCatchAssist(this, point, _catchAssistSpeed, _catchAssistAcceleration);
-            if (IsInsideCatchArea(best.PhysicsPosition, _airborneCatchRadius))
-                TryCompleteCatch(best, point, best.PhysicsPosition);
+            TryCompleteCatch(best, point);
         }
 
-        internal Vector2 GetCatchGroundPosition()
+        private Vector2 GetCatchAreaCenter()
         {
-            return transform.position;
+            Vector2 origin = _catchOrigin != null ? _catchOrigin.position : transform.position;
+            return origin + _catchAreaOffset;
         }
 
-        internal bool IsInsideCatchArea(Vector2 groundPosition, float radius)
+        private bool IsInsideCatchArea(Vector2 visualPosition)
         {
-            Vector2 offset = groundPosition - GetCatchGroundPosition();
-            offset.y /= Mathf.Max(0.1f, _catchAreaVerticalScale);
-            return offset.sqrMagnitude <= radius * radius;
+            Vector2 offset = visualPosition - GetCatchAreaCenter();
+            float horizontalRadius = Mathf.Max(0.1f, _catchHorizontalRadius);
+            float verticalRadius = Mathf.Max(0.1f, _catchVerticalRadius);
+            float normalizedX = offset.x / horizontalRadius;
+            float normalizedY = offset.y / verticalRadius;
+            return normalizedX * normalizedX + normalizedY * normalizedY <= 1f;
         }
 
-        internal bool IsCatchReservationValid(CarryableObject item, Transform point)
+        private bool TryCompleteCatch(CarryableObject item, Transform point)
         {
-            return isActiveAndEnabled && !InteractionLocked && item != null && item.isActiveAndEnabled
-                && item == _catchCandidate && point != null && point == _reservedPoint
-                && HeldCount == _reservedCount && HeldCount < GetCarryCapacity()
-                && GetHoldPoint(HeldCount) == point
-                && IsInsideCatchArea(item.PhysicsPosition,
-                    Mathf.Max(_airborneCatchRadius, _catchAssistRadius));
-        }
-
-        internal bool TryCompleteCatch(CarryableObject item, Transform point, Vector2 contactGroundPosition)
-        {
-            if (!IsCatchReservationValid(item, point)
-                || !IsInsideCatchArea(contactGroundPosition, _airborneCatchRadius)
-                || !item.TryCatch(point)) return false;
-            _catchCandidate = null;
-            _reservedPoint = null;
+            if (item == null || point == null || !IsInsideCatchArea(item.CatchVisualPosition)
+                || !item.TryCatch(point, _catchTweenDuration)) return false;
             _heldObjects.Add(item);
             CaptureCarrySorting(item);
             RefreshCarrySorting();
-            if (_stackAnimator != null) _stackAnimator.PlayCatchLanding(item);
-            if (_player != null && _catchMovementLockDuration > 0f)
-                _player.StopMovementFor(_catchMovementLockDuration);
+            if (_stackAnimator != null) _stackAnimator.PlayCatchLanding(item, _catchSquashStrength);
+            if (_player != null) _player.StopMovementFor(CatchMovementLockDuration);
             return true;
-        }
-
-        private void CancelCatchReservation()
-        {
-            if (_catchCandidate != null) _catchCandidate.CancelCatchAssist(this);
-            _catchCandidate = null;
-            _reservedPoint = null;
         }
 
         private int GetCarryCapacity()
@@ -309,7 +277,6 @@ namespace SiegeCore.Player
 
         public void DropAll()
         {
-            CancelCatchReservation();
             for (int index = _heldObjects.Count - 1; index >= 0; index--)
             {
                 ICarryable item = _heldObjects[index];
@@ -334,59 +301,6 @@ namespace SiegeCore.Player
             _heldObjects.Clear();
         }
 
-        public bool TryPickUpNearest()
-        {
-            if (InteractionLocked) { return false; }
-            int count = HeldCount;
-            if (count >= GetCarryCapacity() || GetHoldPoint(count) == null) return false;
-            if (count > 0 && _heldObjects[0] is SiegeCore.Cannon.Cannon) return false;
-
-            Collider2D[] nearby = Physics2D.OverlapCircleAll(transform.position, _pickupRadius, _pickupLayers);
-            ICarryable nearest = null;
-            float nearestDistance = float.PositiveInfinity;
-            foreach (Collider2D candidate in nearby)
-            {
-                ICarryable item = GetCarryable(candidate);
-                if (item == null || !item.CanBePickedUp) continue;
-                if (count > 0 && item is SiegeCore.Cannon.Cannon) continue;
-                if (!CanReach(item)) continue;
-
-                float distance = ((Vector2)item.CarryTransform.position - (Vector2)transform.position).sqrMagnitude;
-                if (distance >= nearestDistance) continue;
-                nearest = item;
-                nearestDistance = distance;
-            }
-
-            if (nearest == null || !nearest.TryPickUp(GetHoldPoint(count))) return false;
-            _heldObjects.Add(nearest);
-            CaptureCarrySorting(nearest);
-            RefreshCarrySorting();
-            return true;
-        }
-
-        private static ICarryable GetCarryable(Component component)
-        {
-            MonoBehaviour[] behaviours = component.GetComponentsInParent<MonoBehaviour>();
-            foreach (MonoBehaviour behaviour in behaviours)
-            {
-                ICarryable carryable = behaviour as ICarryable;
-                if (carryable != null) return carryable;
-            }
-            return null;
-        }
-
-        private bool CanReach(ICarryable item)
-        {
-            RaycastHit2D[] hits = Physics2D.LinecastAll(transform.position, item.CarryTransform.position, _obstacleLayers);
-            foreach (RaycastHit2D hit in hits)
-            {
-                if (hit.collider.isTrigger || hit.transform.IsChildOf(transform)
-                    || hit.transform.IsChildOf(item.CarryTransform)) continue;
-                return false;
-            }
-            return true;
-        }
-
         public bool TryThrow()
         {
             if (InteractionLocked) { return false; }
@@ -399,12 +313,11 @@ namespace SiegeCore.Player
             IThrowable throwable = heldObject as IThrowable;
             if (throwable != null)
             {
-                if (_aimController == null || !throwable.TryThrow(_aimController.AimDirection, groundPosition, _playerColliders)) return false;
-                CarryableObject thrownCarryable = throwable as CarryableObject;
-                if (thrownCarryable != null)
-                {
-                    _catchBlockedUntilExit.Add(thrownCarryable);
-                }
+                if (_aimController == null
+                    || !throwable.TryThrow(
+                        _aimController.EightWayAimDirection,
+                        groundPosition,
+                        _playerColliders)) return false;
             }
             else heldObject.Drop(groundPosition);
             if (_player != null) _player.StopMovementFor(Mathf.Max(0.01f, _throwMovementLockDuration));
@@ -526,26 +439,24 @@ namespace SiegeCore.Player
 
         private void OnDrawGizmosSelected()
         {
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(transform.position, _pickupRadius);
-
-            Vector3 center = transform.position;
+            Vector3 center = GetCatchAreaCenter();
             Gizmos.color = Color.cyan;
-            DrawCatchEllipse(center, _airborneCatchRadius);
-            Gizmos.color = Color.green;
-            DrawCatchEllipse(center, Mathf.Max(_airborneCatchRadius, _catchAssistRadius));
+            DrawCatchEllipse(center);
+
         }
 
-        private void DrawCatchEllipse(Vector3 center, float radius)
+        private void DrawCatchEllipse(Vector3 center)
         {
             const int segmentCount = 32;
-            Vector3 previous = center + Vector3.right * radius;
+            float horizontalRadius = Mathf.Max(0.1f, _catchHorizontalRadius);
+            float verticalRadius = Mathf.Max(0.1f, _catchVerticalRadius);
+            Vector3 previous = center + Vector3.right * horizontalRadius;
             for (int index = 1; index <= segmentCount; index++)
             {
                 float angle = index * Mathf.PI * 2f / segmentCount;
                 Vector3 current = center + new Vector3(
-                    Mathf.Cos(angle) * radius,
-                    Mathf.Sin(angle) * radius * _catchAreaVerticalScale,
+                    Mathf.Cos(angle) * horizontalRadius,
+                    Mathf.Sin(angle) * verticalRadius,
                     0f);
                 Gizmos.DrawLine(previous, current);
                 previous = current;
