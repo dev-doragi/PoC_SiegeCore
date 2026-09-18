@@ -17,6 +17,8 @@ namespace SiegeCore.Player
         private float _actionMovementSpeedMultiplier = 1f;
         private Vector2 _knockbackVelocity = Vector2.zero;
         private float _knockbackUntil;
+        private Vector2 _forwardStepVelocity = Vector2.zero;
+        private float _forwardStepUntil;
 
         public Vector2 Velocity => _rigidbody != null ? _rigidbody.linearVelocity : Vector2.zero;
         public bool IsMovementLocked => _actionMovementLocked || Time.time < _movementLockedUntil;
@@ -35,6 +37,12 @@ namespace SiegeCore.Player
             if (IsKnockedBack)
             {
                 _rigidbody.linearVelocity = _knockbackVelocity;
+                return;
+            }
+
+            if (Time.time < _forwardStepUntil)
+            {
+                _rigidbody.linearVelocity = _forwardStepVelocity;
                 return;
             }
 
@@ -100,6 +108,18 @@ namespace SiegeCore.Player
             _rigidbody.linearVelocity = _knockbackVelocity;
         }
 
+        public void ApplyForwardStep(Vector2 direction, float distance, float duration)
+        {
+            if (direction.sqrMagnitude < 0.0001f || distance <= 0f || duration <= 0f)
+            {
+                return;
+            }
+
+            _forwardStepVelocity = direction.normalized * distance / duration;
+            _forwardStepUntil = Time.time + duration;
+            _rigidbody.linearVelocity = _forwardStepVelocity;
+        }
+
         private void OnDisable()
         {
             _movementLockedUntil = 0f;
@@ -107,6 +127,8 @@ namespace SiegeCore.Player
             _actionMovementSpeedMultiplier = 1f;
             _knockbackUntil = 0f;
             _knockbackVelocity = Vector2.zero;
+            _forwardStepUntil = 0f;
+            _forwardStepVelocity = Vector2.zero;
             _moveInput = Vector2.zero;
 
             if (_rigidbody != null)

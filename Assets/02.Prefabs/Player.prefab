@@ -672,7 +672,14 @@ MonoBehaviour:
   - {fileID: 810000007}
   - {fileID: 7926638619822723374}
   - {fileID: 2661154820625080043}
+  _stackAnimator: {fileID: 7644753160965201809}
   _pickupRadius: 1.5
+  _airborneCatchRadius: 0.65
+  _catchMovementLockDuration: 0.1
+  _catchAssistRadius: 0.95
+  _catchAreaVerticalScale: 0.65
+  _catchAssistSpeed: 2
+  _catchAssistAcceleration: 12
   _pickupLayers:
     serializedVersion: 2
     m_Bits: 4294967295

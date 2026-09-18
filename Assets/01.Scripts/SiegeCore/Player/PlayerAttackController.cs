@@ -77,6 +77,13 @@ namespace SiegeCore.Player
         [SerializeField, Min(0f), Tooltip("빠따를 놓은 직후 이동이 잠기는 시간입니다.")]
         private float _swingMovementLockDuration = 0.15f;
 
+        [Header("Normal Attack Follow-through")]
+        [SerializeField, Min(0f), Tooltip("일반타와 함께 조준 방향으로 전진하는 거리입니다.")]
+        private float _normalForwardStepDistance = 0.45f;
+
+        [SerializeField, Min(0.01f), Tooltip("일반타 전진 동작의 지속 시간입니다.")]
+        private float _normalForwardStepDuration = 0.12f;
+
         [Header("Charge")]
         [SerializeField, Min(0f), Tooltip("이 시간보다 짧게 누르고 놓으면 공격, 쿨다운, 이동 잠금이 모두 발생하지 않습니다.")]
         private float _minimumChargeDuration = 0.2f;
@@ -281,6 +288,14 @@ namespace SiegeCore.Player
             int swingId = _nextSwingId;
             _nextSwingId++;
 
+            if (!isFullCharge && _playerController != null)
+            {
+                _playerController.ApplyForwardStep(
+                    aimDirection,
+                    _normalForwardStepDistance,
+                    _normalForwardStepDuration);
+            }
+
             if (_showChargeLogs)
             {
                 Debug.Log(
@@ -308,10 +323,15 @@ namespace SiegeCore.Player
                 }
 
                 Vector2 launchDirection = GetLaunchDirection(rat, aimDirection, chargeRatio);
+                float verticalSpeed = flightProfile.VerticalSpeed;
+                if (!isFullCharge && rat.Definition != null)
+                {
+                    verticalSpeed *= rat.Definition.VerticalImpulseMultiplier;
+                }
                 rat.LaunchFromBat(
                     launchDirection,
                     speed,
-                    flightProfile.VerticalSpeed,
+                    verticalSpeed,
                     flightProfile.CatchLockDuration,
                     flightProfile.CollisionFusionMinimumSpeed,
                     swingId,
@@ -403,16 +423,21 @@ namespace SiegeCore.Player
             BatFlightProfile flightProfile = GetFlightProfile(isFullCharge);
             float speed = flightProfile.HorizontalSpeed;
             Vector3 start = transform.position;
-            float flightTime = GetPreviewFlightTime(flightProfile.VerticalSpeed);
+            float verticalSpeed = flightProfile.VerticalSpeed;
             if (_targets.Count > 0)
             {
                 RatAgent representative = GetRepresentativeTarget(aimDirection);
                 if (representative != null)
                 {
                     start = representative.Carryable.PhysicsPosition;
+                    if (!isFullCharge && representative.Definition != null)
+                    {
+                        verticalSpeed *= representative.Definition.VerticalImpulseMultiplier;
+                    }
                 }
             }
 
+            float flightTime = GetPreviewFlightTime(verticalSpeed);
             Vector3 end = start + (Vector3)(aimDirection * speed * flightTime);
             _rangePreview.positionCount = 2;
             _rangePreview.SetPosition(0, start);

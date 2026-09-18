@@ -9,6 +9,13 @@ namespace SiegeCore.Rat
         BBB = 3
     }
 
+    public enum RatWeightRank
+    {
+        Light,
+        Medium,
+        Heavy
+    }
+
     public enum RatState
     {
         Idle,
@@ -43,6 +50,26 @@ namespace SiegeCore.Rat
         public int BasicCount
         {
             get { return (int)Form; }
+        }
+
+        public RatWeightRank WeightRank
+        {
+            get
+            {
+                if (Form == RatForm.BB) return RatWeightRank.Medium;
+                if (Form == RatForm.BBB) return RatWeightRank.Heavy;
+                return RatWeightRank.Light;
+            }
+        }
+
+        public float VerticalImpulseMultiplier
+        {
+            get
+            {
+                if (WeightRank == RatWeightRank.Medium) return 0.85f;
+                if (WeightRank == RatWeightRank.Heavy) return 0.7f;
+                return 1f;
+            }
         }
 
         public bool CanBurst

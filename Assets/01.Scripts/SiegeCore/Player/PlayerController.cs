@@ -82,5 +82,13 @@ namespace SiegeCore.Player
                 _motor.ApplyKnockback(direction, speed, duration);
             }
         }
+
+        public void ApplyForwardStep(Vector2 direction, float distance, float duration)
+        {
+            if (_motor != null)
+            {
+                _motor.ApplyForwardStep(direction, distance, duration);
+            }
+        }
     }
 }

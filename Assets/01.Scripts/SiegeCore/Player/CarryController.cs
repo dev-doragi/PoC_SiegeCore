@@ -24,17 +24,18 @@ namespace SiegeCore.Player
         [SerializeField, Min(0.1f), Tooltip("지상 Rat을 직접 줍는 반경입니다.")]
         private float _pickupRadius = 0.55f;
 
-        [SerializeField, Min(0.1f), Tooltip("다음 슬롯 높이를 통과할 때 허용하는 지상 평면 오차입니다.")]
+        [SerializeField, Min(0.1f), Tooltip("하강 중 Rat의 지면 투영 위치를 받는 Player Catch Area 반경입니다.")]
         private float _airborneCatchRadius = 0.5f;
 
         [SerializeField, Min(0f), Tooltip("공중 Rat을 머리에 받는 순간 플레이어 이동을 잠그는 시간입니다.")]
         private float _catchMovementLockDuration = 0.1f;
 
-        [SerializeField, Min(0.1f)] private float _catchAssistRadius = 0.85f;
-        [SerializeField, Min(0.1f)] private float _catchAssistHeight = 1.2f;
-        [SerializeField, Min(0.01f)] private float _catchAssistDuration = 0.2f;
-        [SerializeField, Min(0f)] private float _catchAssistSpeed = 4f;
-        [SerializeField, Min(0f)] private float _catchAssistAcceleration = 40f;
+        [SerializeField, Min(0.1f), Tooltip("Catch Area 바로 밖에서 약한 조향을 시작하는 반경입니다.")]
+        private float _catchAssistRadius = 0.85f;
+        [SerializeField, Range(0.1f, 1f), Tooltip("화면 원근에 맞춘 Catch Area 세로 비율입니다.")]
+        private float _catchAreaVerticalScale = 0.65f;
+        [SerializeField, Min(0f)] private float _catchAssistSpeed = 2f;
+        [SerializeField, Min(0f)] private float _catchAssistAcceleration = 12f;
         [SerializeField] private LayerMask _pickupLayers = ~0;
         [SerializeField] private LayerMask _obstacleLayers = ~0;
         [SerializeField, Min(0.01f)] private float _throwMovementLockDuration = 0.2f;
@@ -80,6 +81,7 @@ namespace SiegeCore.Player
             }
         }
         public PlayerController Player => _player;
+        internal float AirborneCatchRadius => Mathf.Max(0.1f, _airborneCatchRadius);
         public bool InteractionLocked { get; set; }
         public ICarryable GetHeld(int index) => index >= 0 && index < HeldCount ? _heldObjects[index] : null;
 
@@ -183,7 +185,7 @@ namespace SiegeCore.Player
 
             CarryableObject best = null;
             float bestDistance = float.PositiveInfinity;
-            Vector2 groundTarget = GetCatchGroundPosition(point);
+            Vector2 groundTarget = GetCatchGroundPosition();
             foreach (RatAgent rat in RatAgent.Active)
             {
                 if (rat == null) continue;
@@ -191,18 +193,14 @@ namespace SiegeCore.Player
                 float distance = Vector2.Distance(item.PhysicsPosition, groundTarget);
                 if (_catchBlockedUntilExit.Contains(item))
                 {
-                    if (distance > Mathf.Max(_catchAssistRadius, _airborneCatchRadius)
-                        || item.PhysicsPosition.y + item.Height > point.position.y + _catchAssistHeight)
+                    if (!IsInsideCatchArea(item.PhysicsPosition,
+                        Mathf.Max(_catchAssistRadius, _airborneCatchRadius)))
                         _catchBlockedUntilExit.Remove(item);
                     continue;
                 }
                 if (!rat.CanBeCaught || item.IsCatchAssisted) continue;
-                float gap = item.PhysicsPosition.y + item.Height - point.position.y;
-                if (gap < 0f || gap > _catchAssistHeight
-                    || item.GetTimeToCatchPoint(point) > _catchAssistDuration) continue;
-                float radius = Mathf.Lerp(_airborneCatchRadius,
-                    Mathf.Max(_airborneCatchRadius, _catchAssistRadius), gap / _catchAssistHeight);
-                if (distance > radius || distance >= bestDistance) continue;
+                if (!IsInsideCatchArea(item.PhysicsPosition, _catchAssistRadius)
+                    || distance >= bestDistance) continue;
                 best = item;
                 bestDistance = distance;
             }
@@ -211,11 +209,20 @@ namespace SiegeCore.Player
             _reservedPoint = point;
             _reservedCount = count;
             best.BeginCatchAssist(this, point, _catchAssistSpeed, _catchAssistAcceleration);
+            if (IsInsideCatchArea(best.PhysicsPosition, _airborneCatchRadius))
+                TryCompleteCatch(best, point, best.PhysicsPosition);
         }
 
-        internal Vector2 GetCatchGroundPosition(Transform point)
+        internal Vector2 GetCatchGroundPosition()
         {
-            return new Vector2(point.position.x, transform.position.y);
+            return transform.position;
+        }
+
+        internal bool IsInsideCatchArea(Vector2 groundPosition, float radius)
+        {
+            Vector2 offset = groundPosition - GetCatchGroundPosition();
+            offset.y /= Mathf.Max(0.1f, _catchAreaVerticalScale);
+            return offset.sqrMagnitude <= radius * radius;
         }
 
         internal bool IsCatchReservationValid(CarryableObject item, Transform point)
@@ -224,14 +231,14 @@ namespace SiegeCore.Player
                 && item == _catchCandidate && point != null && point == _reservedPoint
                 && HeldCount == _reservedCount && HeldCount < GetCarryCapacity()
                 && GetHoldPoint(HeldCount) == point
-                && Vector2.Distance(item.PhysicsPosition, GetCatchGroundPosition(point))
-                    <= Mathf.Max(_airborneCatchRadius, _catchAssistRadius);
+                && IsInsideCatchArea(item.PhysicsPosition,
+                    Mathf.Max(_airborneCatchRadius, _catchAssistRadius));
         }
 
         internal bool TryCompleteCatch(CarryableObject item, Transform point, Vector2 contactGroundPosition)
         {
             if (!IsCatchReservationValid(item, point)
-                || Vector2.Distance(contactGroundPosition, GetCatchGroundPosition(point)) > _airborneCatchRadius
+                || !IsInsideCatchArea(contactGroundPosition, _airborneCatchRadius)
                 || !item.TryCatch(point)) return false;
             _catchCandidate = null;
             _reservedPoint = null;
@@ -522,21 +529,26 @@ namespace SiegeCore.Player
             Gizmos.color = Color.yellow;
             Gizmos.DrawWireSphere(transform.position, _pickupRadius);
 
-            Transform catchPoint = GetHoldPoint(Application.isPlaying ? HeldCount : 0);
-            if (catchPoint != null)
+            Vector3 center = transform.position;
+            Gizmos.color = Color.cyan;
+            DrawCatchEllipse(center, _airborneCatchRadius);
+            Gizmos.color = Color.green;
+            DrawCatchEllipse(center, Mathf.Max(_airborneCatchRadius, _catchAssistRadius));
+        }
+
+        private void DrawCatchEllipse(Vector3 center, float radius)
+        {
+            const int segmentCount = 32;
+            Vector3 previous = center + Vector3.right * radius;
+            for (int index = 1; index <= segmentCount; index++)
             {
-                Gizmos.color = Color.cyan;
-                Gizmos.DrawWireSphere(
-                    catchPoint.position,
-                    Mathf.Max(0.1f, _airborneCatchRadius));
-                Vector3 funnelTop = catchPoint.position + Vector3.up * _catchAssistHeight;
-                float assistRadius = Mathf.Max(_airborneCatchRadius, _catchAssistRadius);
-                Gizmos.color = Color.green;
-                Gizmos.DrawWireSphere(funnelTop, assistRadius);
-                Gizmos.DrawLine(catchPoint.position + Vector3.left * _airborneCatchRadius,
-                    funnelTop + Vector3.left * assistRadius);
-                Gizmos.DrawLine(catchPoint.position + Vector3.right * _airborneCatchRadius,
-                    funnelTop + Vector3.right * assistRadius);
+                float angle = index * Mathf.PI * 2f / segmentCount;
+                Vector3 current = center + new Vector3(
+                    Mathf.Cos(angle) * radius,
+                    Mathf.Sin(angle) * radius * _catchAreaVerticalScale,
+                    0f);
+                Gizmos.DrawLine(previous, current);
+                previous = current;
             }
         }
     }

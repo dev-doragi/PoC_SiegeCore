@@ -1725,16 +1725,12 @@ PrefabInstance:
       value: 0.67
       objectReference: {fileID: 0}
     - target: {fileID: 810000005, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
-      propertyPath: _catchAssistHeight
-      value: 1.73
-      objectReference: {fileID: 0}
-    - target: {fileID: 810000005, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
       propertyPath: _catchAssistRadius
-      value: 1.99
+      value: 0.95
       objectReference: {fileID: 0}
     - target: {fileID: 810000005, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
       propertyPath: _airborneCatchRadius
-      value: 1.26
+      value: 0.65
       objectReference: {fileID: 0}
     - target: {fileID: 810000005, guid: 85d49d08b6bcef54d9d515b9fd08f041, type: 3}
       propertyPath: _pickupLayers.m_Bits
@@ -9924,6 +9920,8 @@ MonoBehaviour:
   _enemyDamage: 1
   _cooldown: 0.25
   _swingMovementLockDuration: 0.2
+  _normalForwardStepDistance: 0.45
+  _normalForwardStepDuration: 0.12
   _minimumChargeDuration: 0.3
   _fullChargeDuration: 1
   _fullChargeThreshold: 1

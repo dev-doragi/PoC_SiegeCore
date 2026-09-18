@@ -112,7 +112,6 @@ namespace SiegeCore.Player
         private Transform _catchPoint;
         private float _catchSteeringSpeed;
         private float _catchSteeringAcceleration;
-        private bool _catchContact;
 
         private Vector2 _lastGroundPosition;
         private bool _hasGroundPosition;
@@ -592,7 +591,7 @@ namespace SiegeCore.Player
         /// <summary>Airborne Rat을 머리 슬롯에 붙이는 전용 경로다.</summary>
         internal bool TryCatch(Transform holdPoint)
         {
-            if (!_catchContact || _rat == null || !_rat.CanBeCaught
+            if (_rat == null || !_rat.CanBeCaught
                 || _fusionLocked || holdPoint == null || holdPoint.IsChildOf(transform)) return false;
             CancelSnap();
             ResetBatFlightState();
@@ -618,15 +617,6 @@ namespace SiegeCore.Player
         public bool IsCatchAssisted => _catchOwner != null;
         internal bool HasCatchAssist(CarryController owner) => _catchOwner == owner;
 
-        internal float GetTimeToCatchPoint(Transform point)
-        {
-            float gap = PhysicsPosition.y + _height - point.position.y;
-            if (gap < 0f) return float.PositiveInfinity;
-            float gravity = Mathf.Max(0.01f, _heightGravity);
-            float projectedSpeed = _verticalSpeed + _rigidbody.linearVelocity.y;
-            return (projectedSpeed + Mathf.Sqrt(projectedSpeed * projectedSpeed + 2f * gravity * gap)) / gravity;
-        }
-
         internal void BeginCatchAssist(CarryController owner, Transform point, float speed, float acceleration)
         {
             if (IsCatchAssisted || _rat == null || !_rat.CanBeCaught) return;
@@ -641,7 +631,6 @@ namespace SiegeCore.Player
             if (_catchOwner != owner) return;
             _catchOwner = null;
             _catchPoint = null;
-            _catchContact = false;
         }
 
         // Height follows gravity throughout assist; only the ground-plane velocity is steered.
@@ -655,32 +644,14 @@ namespace SiegeCore.Player
                 CancelCatchAssist(owner);
                 return false;
             }
-            float contactTime = GetTimeToCatchPoint(point);
-            if (float.IsPositiveInfinity(contactTime))
-            {
-                CancelCatchAssist(owner);
-                return false;
-            }
-            Vector2 offset = owner.GetCatchGroundPosition(point) - PhysicsPosition;
+            Vector2 offset = owner.GetCatchGroundPosition() - PhysicsPosition;
             Vector2 desiredVelocity = Vector2.ClampMagnitude(
-                offset / Mathf.Max(Time.fixedDeltaTime, contactTime), _catchSteeringSpeed);
+                offset.normalized * _catchSteeringSpeed, _catchSteeringSpeed);
             _rigidbody.linearVelocity = Vector2.MoveTowards(_rigidbody.linearVelocity,
                 desiredVelocity, _catchSteeringAcceleration * Time.fixedDeltaTime);
-            contactTime = GetTimeToCatchPoint(point);
-            if (contactTime > Time.fixedDeltaTime) return false;
-            float contactHeight = _height + _verticalSpeed * contactTime
-                - 0.5f * Mathf.Max(0.01f, _heightGravity) * contactTime * contactTime;
-            if (contactHeight < 0f)
-            {
-                CancelCatchAssist(owner);
-                return false;
-            }
-
-            // Sweep to the height crossing so a fast fall cannot skip the landing plane.
-            Vector2 contactPosition = PhysicsPosition + _rigidbody.linearVelocity * contactTime;
-            _catchContact = true;
+            Vector2 contactPosition = PhysicsPosition;
+            if (!owner.IsInsideCatchArea(contactPosition, owner.AirborneCatchRadius)) return false;
             bool caught = owner.TryCompleteCatch(this, point, contactPosition);
-            _catchContact = false;
             if (!caught) CancelCatchAssist(owner);
             return caught;
         }
@@ -1483,6 +1454,10 @@ namespace SiegeCore.Player
                 incomingSpeed * Mathf.Max(0f, _popupVerticalSpeedMultiplier),
                 minimumPopupSpeed,
                 maximumPopupSpeed);
+            if (_rat != null && _rat.Definition != null)
+            {
+                popupVerticalSpeed *= _rat.Definition.VerticalImpulseMultiplier;
+            }
             _verticalSpeed = popupVerticalSpeed;
 
             if (_batReturnTarget == null)
