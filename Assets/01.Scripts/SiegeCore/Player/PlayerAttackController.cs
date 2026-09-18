@@ -539,17 +539,17 @@ namespace SiegeCore.Player
 
             _lastLoggedChargeStep = currentStep;
             int percent = Mathf.RoundToInt(ChargeRatio * 100f);
-            Debug.Log(
-                "[Bat Charge] "
-                + percent
-                + "% | Move "
-                + Mathf.RoundToInt(
-                    Mathf.Lerp(1f, _fullChargeMovementMultiplier, ChargeRatio) * 100f)
-                + "% | Radius "
-                + GetAttackRadius(ChargeRatio).ToString("0.00")
-                + " | Angle "
-                + GetAttackAngle(ChargeRatio).ToString("0.0"),
-                this);
+            //Debug.Log(
+            //    "[Bat Charge] "
+            //    + percent
+            //    + "% | Move "
+            //    + Mathf.RoundToInt(
+            //        Mathf.Lerp(1f, _fullChargeMovementMultiplier, ChargeRatio) * 100f)
+            //    + "% | Radius "
+            //    + GetAttackRadius(ChargeRatio).ToString("0.00")
+            //    + " | Angle "
+            //    + GetAttackAngle(ChargeRatio).ToString("0.0"),
+            //    this);
         }
 
         private void OnDrawGizmosSelected()

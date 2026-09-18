@@ -1,10 +1,11 @@
 using System.Collections.Generic;
 using SiegeCore.Cannon;
+using SiegeCore.Combat;
 using UnityEngine;
 
 namespace SiegeCore.Rat
 {
-    public sealed class RatStructure : MonoBehaviour
+    public sealed class RatStructure : MonoBehaviour, IDamageable
     {
         public static readonly HashSet<RatStructure> Active = new HashSet<RatStructure>();
         [SerializeField] private VehicleSide _faction;
@@ -13,10 +14,12 @@ namespace SiegeCore.Rat
         [SerializeField] private Collider2D _barrier;
         [SerializeField] private SpriteRenderer _visual;
         public VehicleSide Faction { get { return _faction; } }
+        public VehicleSide Side { get { return _faction; } }
         public bool IsEntrance { get { return _isEntrance; } }
         public float Health { get; private set; }
         public float MaxHealth { get { return _maxHealth; } }
         public bool IsDestroyed { get { return Health <= 0f; } }
+        public bool IsDead { get { return IsDestroyed; } }
 
         private void OnEnable()
         {
@@ -44,6 +47,11 @@ namespace SiegeCore.Rat
 
             ApplyDestroyedState();
             LogDestruction();
+        }
+
+        public void TakeDamage(DamageData damageData)
+        {
+            TakeDamage(damageData.AttackerSide, damageData.Damage);
         }
 
         private void ApplyDestroyedState()

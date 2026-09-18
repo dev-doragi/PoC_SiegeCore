@@ -13,6 +13,7 @@ namespace SiegeCore.Cannon
         public VehicleSide VehicleSide => _vehicleSide;
         public CannonSlotType SlotType => _slotType;
         public CannonSlot TargetSlot => _targetSlot;
+        public Cannon InstalledCannon { get; private set; }
 
         private void Awake()
         {
@@ -33,6 +34,19 @@ namespace SiegeCore.Cannon
 
             worldPosition = default;
             return false;
+        }
+
+        public void RegisterCannon(Cannon cannon)
+        {
+            InstalledCannon = cannon;
+        }
+
+        public void UnregisterCannon(Cannon cannon)
+        {
+            if (InstalledCannon == cannon)
+            {
+                InstalledCannon = null;
+            }
         }
     }
 }

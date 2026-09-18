@@ -1074,6 +1074,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatFactory
   _battlefield: {fileID: 501205956}
+  _poolManager: {fileID: 1144848505}
   _basicPool: {fileID: 11400000, guid: 0e0731ba57f04afea61ef001c8e6f180, type: 2}
   _bbPool: {fileID: 11400000, guid: 76f62d533ebb42c28e2c6de71e311f21, type: 2}
   _bbbPool: {fileID: 11400000, guid: 3c39686fa2184d548a07f1e11198d160, type: 2}
@@ -9402,7 +9403,7 @@ MonoBehaviour:
   _factory: {fileID: 501205960}
   _faction: 0
   _outlet: {fileID: 1777149721}
-  _spawnInterval: 3
+  _spawnInterval: 5
   _ejectDirection: {x: 2, y: 0}
   _ejectSpeed: 2
 --- !u!1 &1807365966

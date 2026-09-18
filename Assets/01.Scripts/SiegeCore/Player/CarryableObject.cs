@@ -150,10 +150,15 @@ namespace SiegeCore.Player
         public event Action StateChanged;
         public event Action<IThrowable> GroundSortingRequested;
 
-        public bool IsCarried { get; private set; }
-        public bool IsAirborne { get; private set; }
-        public bool IsLoaded { get; private set; }
-        public bool IsCannonFlight { get; private set; }
+        public CarryState State { get; private set; } = CarryState.Grounded;
+        public FlightType Flight { get; private set; } = FlightType.None;
+        public bool IsCarried { get { return State == CarryState.Carried; } }
+        public bool IsAirborne { get { return State == CarryState.Airborne; } }
+        public bool IsLoaded { get { return State == CarryState.Loaded; } }
+        public bool IsCannonFlight
+        {
+            get { return State == CarryState.Airborne && Flight == FlightType.Cannon; }
+        }
         public bool IsHitStopped { get { return _isHitStopped; } }
         public bool IsFusionLocked { get { return _fusionLocked; } }
         public bool IsDescending { get { return IsAirborne && _verticalSpeed <= 0f; } }
@@ -177,6 +182,12 @@ namespace SiegeCore.Player
 
                 return !_isHitStopped && !_fusionLocked && !_isSnapping;
             }
+        }
+
+        private void SetState(CarryState state, FlightType flight)
+        {
+            State = state;
+            Flight = state == CarryState.Airborne ? flight : FlightType.None;
         }
 
         public CannonTrajectoryType TrajectoryType { get; private set; }
@@ -335,33 +346,43 @@ namespace SiegeCore.Player
 
         public void ResetForRat(Tilemap groundTilemap)
         {
+            ResetMotion();
+            _groundTilemap = groundTilemap;
+            _worldParent = transform.parent;
+            _rigidbody.simulated = true;
+        }
+
+        private void ResetMotion()
+        {
             CancelSnap();
             CompleteCatchTween();
             ResetBatFlightState();
             RestoreThrowerCollisions();
 
-            _groundTilemap = groundTilemap;
-            _worldParent = transform.parent;
-
-            IsCarried = false;
-            IsAirborne = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
+            SetState(CarryState.Grounded, FlightType.None);
 
             _height = 0f;
             _verticalSpeed = 0f;
+            _peakHeight = 0f;
+            _hasReachedPeak = false;
+            _cannonFlightTime = 0f;
+            _cannonFlightDuration = 0f;
+            _cannonArcHeight = 0f;
+            _cannonStartPosition = Vector2.zero;
+            _cannonTargetPosition = Vector2.zero;
+            TrajectoryType = default;
 
             _rigidbody.linearVelocity = Vector2.zero;
             _rigidbody.angularVelocity = 0f;
             _rigidbody.bodyType = RigidbodyType2D.Kinematic;
-            _rigidbody.simulated = true;
+            _rigidbody.simulated = false;
 
             _collider.isTrigger = true;
             _collider.sharedMaterial = _originalMaterial;
 
             ResetVisualHeight();
 
-            NotifyStateChanged();
+            // Reset is not a landing, impact, or carry transition.
         }
 
         // --------------------------------------------------------------------
@@ -382,10 +403,7 @@ namespace SiegeCore.Player
 
             _worldParent = transform.parent;
 
-            IsCarried = true;
-            IsAirborne = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
+            SetState(CarryState.Carried, FlightType.None);
 
             _height = 0f;
             _verticalSpeed = 0f;
@@ -429,10 +447,7 @@ namespace SiegeCore.Player
             transform.position = groundPosition;
             _rigidbody.position = groundPosition;
 
-            IsCarried = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
-            IsAirborne = true;
+            SetState(CarryState.Airborne, FlightType.Throw);
 
             _height = initialHeight;
             _verticalSpeed = _upwardSpeed;
@@ -519,10 +534,7 @@ namespace SiegeCore.Player
 
             _groundTilemap = groundTilemap;
 
-            IsCarried = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
-            IsAirborne = true;
+            SetState(CarryState.Airborne, FlightType.Throw);
 
             _height = 0f;
             _verticalSpeed = _upwardSpeed;
@@ -570,6 +582,8 @@ namespace SiegeCore.Player
                 return false;
             }
 
+            SetState(CarryState.Airborne, FlightType.Bat);
+
             _batSwingId = swingId;
             _canCollisionFuse = isFullCharge;
             _collisionFusionMinimumSpeedForFlight =
@@ -605,10 +619,7 @@ namespace SiegeCore.Player
             ResetBatFlightState();
             Vector3 displayedWorldPosition = _visual != null ? _visual.position : transform.position;
             _worldParent = transform.parent;
-            IsCarried = true;
-            IsAirborne = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
+            SetState(CarryState.Carried, FlightType.None);
             RefreshRatCollisionPairs();
             _height = 0f;
             _verticalSpeed = 0f;
@@ -655,10 +666,7 @@ namespace SiegeCore.Player
             transform.position = groundPosition;
             _rigidbody.position = groundPosition;
 
-            IsCarried = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
-            IsAirborne = true;
+            SetState(CarryState.Airborne, FlightType.Bat);
             _height = Mathf.Max(0f, height);
             _verticalSpeed = verticalSpeed;
             BeginCatchArc();
@@ -692,10 +700,7 @@ namespace SiegeCore.Player
 
             _groundTilemap = groundTilemap;
 
-            IsCarried = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
-            IsAirborne = true;
+            SetState(CarryState.Airborne, FlightType.Bat);
 
             _height = Mathf.Max(0f, initialHeight);
             _verticalSpeed = 0f;
@@ -1519,8 +1524,6 @@ namespace SiegeCore.Player
             transform.position = worldPosition;
             _rigidbody.position = worldPosition;
 
-            IsCarried = false;
-
             CompleteSettle(true);
         }
 
@@ -1548,10 +1551,7 @@ namespace SiegeCore.Player
 
             PrepareGroundPhysics();
 
-            IsCarried = false;
-            IsAirborne = false;
-            IsLoaded = false;
-            IsCannonFlight = false;
+            SetState(CarryState.Grounded, FlightType.None);
             RefreshRatCollisionPairs();
 
             _hasSnapTarget = false;
@@ -1589,10 +1589,7 @@ namespace SiegeCore.Player
             RestoreThrowerCollisions();
             GroundSortingRequested?.Invoke(this);
 
-            IsCarried = false;
-            IsAirborne = false;
-            IsLoaded = true;
-            IsCannonFlight = false;
+            SetState(CarryState.Loaded, FlightType.None);
 
             _height = 0f;
             _verticalSpeed = 0f;
@@ -1642,10 +1639,7 @@ namespace SiegeCore.Player
             transform.position = muzzlePosition;
             _rigidbody.position = muzzlePosition;
 
-            IsCarried = false;
-            IsLoaded = false;
-            IsAirborne = true;
-            IsCannonFlight = true;
+            SetState(CarryState.Airborne, FlightType.Cannon);
             RefreshRatCollisionPairs();
 
             TrajectoryType = trajectoryType;
@@ -2242,10 +2236,9 @@ namespace SiegeCore.Player
         private void OnDisable()
         {
             GroundSortingRequested?.Invoke(this);
-            CancelSnap();
-            CompleteCatchTween();
-            ResetBatFlightState();
-            RestoreThrowerCollisions();
+            ResetMotion();
+            _worldParent = null;
+            _groundTilemap = null;
             ActiveItems.Remove(this);
             RefreshRatCollisionPairs();
         }

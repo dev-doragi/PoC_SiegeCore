@@ -28,6 +28,19 @@ namespace SiegeCore.Rat
         Dead
     }
 
+    public enum RatCondition
+    {
+        Normal,
+        Groggy,
+        Dead
+    }
+
+    public enum RatGroundMode
+    {
+        Idle,
+        Combat
+    }
+
     [CreateAssetMenu(menuName = "SiegeCore/Rat Definition")]
     public sealed class RatDefinition : ScriptableObject
     {

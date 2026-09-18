@@ -1,15 +1,39 @@
 using System;
 using System.Collections.Generic;
 using SiegeCore.Cannon;
+using SiegeCore.Combat;
 using SiegeCore.Player;
 using UnityEngine;
 
 namespace SiegeCore.Rat
 {
     [RequireComponent(typeof(CarryableObject))]
-    public sealed class RatAgent : MonoBehaviour
+    public sealed class RatAgent : MonoBehaviour, IDamageable
     {
         public static readonly HashSet<RatAgent> Active = new HashSet<RatAgent>();
+
+        private const int StateHistoryCapacity = 16;
+
+        [Serializable]
+        public struct StateTransition
+        {
+            public float Time;
+            public int Frame;
+            public RatState PreviousState;
+            public RatState NextState;
+
+            public StateTransition(
+                float time,
+                int frame,
+                RatState previousState,
+                RatState nextState)
+            {
+                Time = time;
+                Frame = frame;
+                PreviousState = previousState;
+                NextState = nextState;
+            }
+        }
 
         [Header("Definition")]
         [SerializeField] private RatDefinition _definition;
@@ -20,6 +44,9 @@ namespace SiegeCore.Rat
 
         private CarryableObject _carryable;
         private RatFactory _factory;
+        private RatGroundAI _groundAI;
+        private PooledObject _pooledObject;
+        private SiegeCore.Projectile.Projectile _projectile;
 
         private RatState _state;
         private RatState _groundReturnState = RatState.Idle;
@@ -30,6 +57,10 @@ namespace SiegeCore.Rat
 
         private bool _burst;
         private bool _suppressCarryEvent;
+
+        [NonSerialized]
+        private readonly List<StateTransition> _stateHistory =
+            new List<StateTransition>(StateHistoryCapacity);
 
         public event Action<RatAgent, RatState, RatState> StateChanged;
         public event Action<RatAgent> Died;
@@ -54,7 +85,42 @@ namespace SiegeCore.Rat
             get { return _state; }
         }
 
+        public IReadOnlyList<StateTransition> StateHistory
+        {
+            get { return _stateHistory; }
+        }
+
+        public RatCondition Condition
+        {
+            get
+            {
+                if (_state == RatState.Dead) return RatCondition.Dead;
+                if (_state == RatState.Groggy) return RatCondition.Groggy;
+                return RatCondition.Normal;
+            }
+        }
+
+        public RatGroundMode GroundMode
+        {
+            get
+            {
+                return _groundReturnState == RatState.GroundCombat
+                    ? RatGroundMode.Combat
+                    : RatGroundMode.Idle;
+            }
+        }
+
         public VehicleSide Faction { get; private set; }
+
+        public VehicleSide Side
+        {
+            get { return Faction; }
+        }
+
+        public bool IsDead
+        {
+            get { return _state == RatState.Dead; }
+        }
 
         // ���� Projectile���� ���.
         public VehicleSide AttackSide { get; private set; }
@@ -130,6 +196,9 @@ namespace SiegeCore.Rat
         private void Awake()
         {
             _carryable = GetComponent<CarryableObject>();
+            _groundAI = GetComponent<RatGroundAI>();
+            _pooledObject = GetComponent<PooledObject>();
+            _projectile = GetComponent<SiegeCore.Projectile.Projectile>();
 
             if (_definition == null)
             {
@@ -144,11 +213,29 @@ namespace SiegeCore.Rat
         private void OnEnable()
         {
             Active.Add(this);
+            _stateHistory.Clear();
         }
 
         private void OnDisable()
         {
             Active.Remove(this);
+            // Lifecycle cleanup must not publish gameplay transitions.
+            _state = RatState.Idle;
+            _groundReturnState = RatState.Idle;
+            _landingState = RatState.Idle;
+            _groggyUntil = 0f;
+            _landingGroggyDuration = 0f;
+            _burst = false;
+            _suppressCarryEvent = false;
+            ProjectileSourceSlot = null;
+            AttackSide = Faction;
+            Health = 0f;
+            _factory = null;
+        }
+
+        public void ClearStateHistory()
+        {
+            _stateHistory.Clear();
         }
 
         private void OnDestroy()
@@ -174,10 +261,18 @@ namespace SiegeCore.Rat
             bool combat,
             bool falling)
         {
+            if (_projectile != null)
+            {
+                _projectile.ResetForPool();
+            }
+
             _factory = factory;
+
+            _stateHistory.Clear();
 
             Faction = faction;
             AttackSide = faction;
+            ProjectileSourceSlot = null;
 
             Health = _definition.Health;
 
@@ -191,10 +286,9 @@ namespace SiegeCore.Rat
             _groundReturnState = groundState;
             _landingState = groundState;
 
-            RatGroundAI groundAI = GetComponent<RatGroundAI>();
-            if (groundAI != null)
+            if (_groundAI != null)
             {
-                groundAI.ResetForSpawn();
+                _groundAI.ResetForSpawn();
             }
 
             _suppressCarryEvent = true;
@@ -230,6 +324,17 @@ namespace SiegeCore.Rat
 
             RatState previousState = _state;
             _state = nextState;
+
+            if (_stateHistory.Count >= StateHistoryCapacity)
+            {
+                _stateHistory.RemoveAt(0);
+            }
+
+            _stateHistory.Add(new StateTransition(
+                Time.time,
+                Time.frameCount,
+                previousState,
+                nextState));
 
             StateChanged?.Invoke(
                 this,
@@ -752,6 +857,16 @@ namespace SiegeCore.Rat
             }
         }
 
+        public void TakeDamage(DamageData damageData)
+        {
+            if (damageData.AttackerSide == Faction)
+            {
+                return;
+            }
+
+            TakeDamage(damageData.Damage);
+        }
+
         private void Die()
         {
             if (_state == RatState.Dead)
@@ -784,13 +899,10 @@ namespace SiegeCore.Rat
 
         public void Release()
         {
-            PooledObject pooledObject =
-                GetComponent<PooledObject>();
-
-            if (pooledObject != null
-                && pooledObject.Owner != null)
+            if (_pooledObject != null
+                && _pooledObject.Owner != null)
             {
-                pooledObject.Return();
+                _pooledObject.Return();
                 return;
             }
 

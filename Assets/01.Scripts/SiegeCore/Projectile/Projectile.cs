@@ -1,4 +1,5 @@
 using SiegeCore.Cannon;
+using SiegeCore.Combat;
 using SiegeCore.Player;
 using SiegeCore.Rat;
 using UnityEngine;
@@ -52,35 +53,24 @@ namespace SiegeCore.Projectile
 
         private void OnEnable()
         {
+            ResetForPool();
             _agent.StateChanged += HandleStateChanged;
-
-            RefreshState(_agent.State);
+            _carryable.StateChanged += HandleCarryableStateChanged;
         }
 
         private void OnDisable()
         {
             _agent.StateChanged -= HandleStateChanged;
+            _carryable.StateChanged -= HandleCarryableStateChanged;
 
-            _isActive = false;
-            _resolved = false;
+            ResetForPool();
         }
 
-        private void Update()
+        internal void ResetForPool()
         {
-            if (!IsCannonFlight)
-            {
-                return;
-            }
-
-            /*
-             * ���� ������ CarryableObject�� ����Ѵ�.
-             * CarryableObject�� CannonFlight�� �����ٸ�
-             * ���������� ���� ������ ���� ���̴�.
-             */
-            if (!_carryable.IsCannonFlight)
-            {
-                Resolve();
-            }
+            // Pool activation is not a new cannon launch.
+            _isActive = false;
+            _resolved = false;
         }
 
         private void HandleStateChanged(
@@ -89,6 +79,14 @@ namespace SiegeCore.Projectile
             RatState nextState)
         {
             RefreshState(nextState);
+        }
+
+        private void HandleCarryableStateChanged()
+        {
+            if (_isActive && !_carryable.IsCannonFlight)
+            {
+                Resolve();
+            }
         }
 
         private void RefreshState(RatState state)
@@ -160,17 +158,19 @@ namespace SiegeCore.Projectile
                 return;
             }
 
-            siege.TakeProjectileDamage(
-                Side,
-                _agent.Definition.ProjectileDamage,
-                transform.position);
+            siege.TakeDamage(new DamageData
+            {
+                AttackerSide = Side,
+                Damage = _agent.Definition.ProjectileDamage,
+                HitPoint = transform.position
+            });
 
             Resolve();
         }
 
         public void Resolve()
         {
-            if (_resolved)
+            if (!_isActive || _resolved)
             {
                 return;
             }

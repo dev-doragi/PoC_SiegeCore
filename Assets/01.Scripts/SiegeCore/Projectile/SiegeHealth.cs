@@ -1,14 +1,16 @@
 using SiegeCore.Cannon;
+using SiegeCore.Combat;
 using UnityEngine;
 
 namespace SiegeCore.Projectile
 {
-    public sealed class SiegeHealth : MonoBehaviour
+    public sealed class SiegeHealth : MonoBehaviour, IDamageable
     {
         [SerializeField] private VehicleSide _side;
         [SerializeField, Min(1f)] private float _maxHealth = 100f;
 
         public VehicleSide Side => _side;
+        public bool IsDead => IsDestroyed;
         public float MaxHealth => _maxHealth;
         public float CurrentHealth { get; private set; }
         public bool IsDestroyed { get; private set; }
@@ -41,6 +43,14 @@ namespace SiegeCore.Projectile
             });
             string result = attackerSide == VehicleSide.Ally ? "Ally Victory" : "Ally Defeat";
             Debug.Log($"[SiegeHealth] {_side} Siege destroyed. {result}.", this);
+        }
+
+        public void TakeDamage(DamageData damageData)
+        {
+            TakeProjectileDamage(
+                damageData.AttackerSide,
+                damageData.Damage,
+                damageData.HitPoint);
         }
     }
 

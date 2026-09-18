@@ -58,6 +58,8 @@ namespace SiegeCore.Player
 
         private PlayerAimController _aimController;
         private PlayerController _player;
+        private PlayerAttackController _attackController;
+        private RatStacking _ratStacking;
         private Collider2D[] _playerColliders;
         private Vector3 _holdOffset;
         private readonly List<ICarryable> _heldObjects = new List<ICarryable>();
@@ -111,6 +113,8 @@ namespace SiegeCore.Player
         private void Awake()
         {
             _player = GetComponent<PlayerController>();
+            _attackController = GetComponent<PlayerAttackController>();
+            _ratStacking = GetComponent<RatStacking>();
             if (_stackAnimator == null) _stackAnimator = GetComponentInChildren<CarryStackAnimator>();
             _carriedLayerId = SortingLayer.NameToID("Carried");
             _aimController = GetComponent<PlayerAimController>();
@@ -158,10 +162,9 @@ namespace SiegeCore.Player
                 return;
             }
 
-            PlayerAttackController attack = GetComponent<PlayerAttackController>();
-            if (attack != null)
+            if (_attackController != null)
             {
-                attack.CancelCharge();
+                _attackController.CancelCharge();
             }
 
             TryThrow();
@@ -243,16 +246,14 @@ namespace SiegeCore.Player
 
             _handlingEnemyRecovery = true;
 
-            RatStacking stacking = GetComponent<RatStacking>();
-            if (stacking != null)
+            if (_ratStacking != null)
             {
-                stacking.Cancel();
+                _ratStacking.Cancel();
             }
 
-            PlayerAttackController attack = GetComponent<PlayerAttackController>();
-            if (attack != null)
+            if (_attackController != null)
             {
-                attack.CancelCharge();
+                _attackController.CancelCharge();
             }
 
             DropAll();

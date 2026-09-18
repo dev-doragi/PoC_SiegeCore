@@ -70,7 +70,7 @@ namespace SiegeCore.Rat
         private void OnDisable()
         {
             _agent.StateChanged -= HandleStateChanged;
-            StopMovement();
+            ResetForSpawn();
         }
 
         private void FixedUpdate()
@@ -420,6 +420,10 @@ namespace SiegeCore.Rat
             _isInfiltrated = false;
             _battlefield = null;
             ResetPath();
+            StopMovement();
+            _idleMoveSpeed = 0f;
+            _nextAttackTime = 0f;
+            BeginIdleRest();
         }
 
         public void BeginBaseInfiltration()

@@ -9,11 +9,10 @@ namespace SiegeCore.Rat
         private RatBattlefield _battlefield;
 
         [Header("Pools")]
+        [SerializeField] private PoolManager _poolManager;
         [SerializeField] private PoolDefinition _basicPool;
         [SerializeField] private PoolDefinition _bbPool;
         [SerializeField] private PoolDefinition _bbbPool;
-
-        private PoolManager _poolManager;
 
         public RatBattlefield Battlefield
         {
@@ -169,12 +168,6 @@ namespace SiegeCore.Rat
                 || _bbbPool.Prefab == null)
             {
                 return false;
-            }
-
-            if (_poolManager == null)
-            {
-                _poolManager =
-                    FindFirstObjectByType<PoolManager>();
             }
 
             return _poolManager != null
