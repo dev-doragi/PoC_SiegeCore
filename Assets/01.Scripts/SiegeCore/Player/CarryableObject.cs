@@ -967,7 +967,8 @@ namespace SiegeCore.Player
         private bool IsAvailableCell(Vector3Int cell)
         {
             return _groundTilemap.HasTile(cell)
-                && !_occupiedCells.Contains(cell);
+                && !_occupiedCells.Contains(cell)
+                && IsGroundFootprintValid(_groundTilemap.GetCellCenterWorld(cell));
         }
 
         private void SetSnapTarget(Vector3Int cell)
@@ -1251,6 +1252,8 @@ namespace SiegeCore.Player
             Vector2 desiredPosition)
         {
             _groundTilemap = groundTilemap;
+            // 풀에서 꺼내 이동한 직후에도 새 위치와 크기로 물리 쿼리를 수행한다.
+            Physics2D.SyncTransforms();
             if (_groundTilemap == null || IsGroundFootprintValid(desiredPosition))
             {
                 return desiredPosition;
@@ -1340,47 +1343,17 @@ namespace SiegeCore.Player
 
             Vector2 position = _rigidbody.position;
 
-            if (!_hasGroundPosition)
+            if (!_hasGroundPosition || !IsGroundFootprintValid(_lastGroundPosition))
             {
-                if (!IsGroundFootprintValid(position))
+                _lastGroundPosition = FindNearestValidGroundPosition(
+                    _groundTilemap,
+                    position);
+                _hasGroundPosition = IsGroundFootprintValid(_lastGroundPosition);
+                if (!_hasGroundPosition)
                 {
-                    float closest = float.PositiveInfinity;
-
-                    foreach (Vector3Int cell
-                             in _groundTilemap.cellBounds.allPositionsWithin)
-                    {
-                        if (!_groundTilemap.HasTile(cell))
-                        {
-                            continue;
-                        }
-
-                        Vector2 center =
-                            _groundTilemap.GetCellCenterWorld(cell);
-
-                        float distance =
-                            (center - position).sqrMagnitude;
-
-                        if (distance >= closest)
-                        {
-                            continue;
-                        }
-
-                        closest = distance;
-                        _lastGroundPosition = center;
-                    }
-
-                    if (float.IsPositiveInfinity(closest))
-                    {
-                        _rigidbody.linearVelocity = Vector2.zero;
-                        return;
-                    }
+                    _rigidbody.linearVelocity = Vector2.zero;
+                    return;
                 }
-                else
-                {
-                    _lastGroundPosition = position;
-                }
-
-                _hasGroundPosition = true;
             }
 
             bool currentHitX;
