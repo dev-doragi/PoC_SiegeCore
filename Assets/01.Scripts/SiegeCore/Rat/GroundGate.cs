@@ -12,6 +12,7 @@ namespace SiegeCore.Rat
         [SerializeField] private RatFactory _factory;
         [SerializeField] private Transform _exitPoint;
         [SerializeField] private RatStructure _entrance;
+        [SerializeField] private BoxCollider2D _baseArea;
         [SerializeField, Min(0f)] private float _spawnSpread = 0.75f;
 
         private readonly HashSet<RatAgent> _pendingRats =
@@ -20,6 +21,11 @@ namespace SiegeCore.Rat
         public VehicleSide Faction { get { return _faction; } }
         public RatStructure Entrance { get { return _entrance; } }
         public Vector3 BasePosition { get { return transform.position; } }
+
+        public bool ContainsBasePosition(Vector3 position)
+        {
+            return _baseArea != null && _baseArea.OverlapPoint(position);
+        }
 
         public bool TryEnterArena(RatAgent rat)
         {

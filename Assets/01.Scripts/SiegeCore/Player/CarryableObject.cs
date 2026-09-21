@@ -12,6 +12,7 @@ namespace SiegeCore.Player
     [RequireComponent(typeof(Rigidbody2D), typeof(Collider2D))]
     public sealed class CarryableObject : MonoBehaviour, IThrowable
     {
+        [SerializeField] private RatMergeResolver _mergeResolver;
         private enum BatFlightPhase
         {
             None,
@@ -1836,15 +1837,15 @@ namespace SiegeCore.Player
 
             RatAgent otherRat = other._rat;
             Vector3 midpoint = (transform.position + other.transform.position) * 0.5f;
-            int basicCount = _rat.Definition.BasicCount + otherRat.Definition.BasicCount;
+            if (!_mergeResolver.TryResolve(_rat.Definition, otherRat.Definition, out RatDefinition resultDefinition))
+                return false;
 
             _fusionLocked = true;
             other._fusionLocked = true;
             _fusionPartner = other;
             other._fusionPartner = this;
 
-            RatForm resultForm = (RatForm)basicCount;
-            CompleteCollisionFusion(other, resultForm, midpoint);
+            CompleteCollisionFusion(other, resultDefinition, midpoint);
 
             return true;
         }
@@ -1886,10 +1887,10 @@ namespace SiegeCore.Player
                     + " > " + _fusionHeightTolerance.ToString("F2");
             }
 
-            int basicCount = _rat.Definition.BasicCount + otherRat.Definition.BasicCount;
-            if (basicCount < 2 || basicCount > 3)
+            if (_mergeResolver == null
+                || !_mergeResolver.TryResolve(_rat.Definition, otherRat.Definition, out RatDefinition resultDefinition))
             {
-                return "합산 랭크 " + basicCount + " (허용 2~3)";
+                return "합성 규칙 없음";
             }
 
             return null;
@@ -1897,7 +1898,7 @@ namespace SiegeCore.Player
 
         private void CompleteCollisionFusion(
             CarryableObject other,
-            RatForm resultForm,
+            RatDefinition resultDefinition,
             Vector3 position)
         {
             if (other == null || _rat == null || _rat.Factory == null)
@@ -1921,7 +1922,7 @@ namespace SiegeCore.Player
             float preservedFusionMinimumSpeed =
                 _collisionFusionMinimumSpeedForFlight;
             Transform preservedReturnTarget = _batReturnTarget;
-            RatAgent result = factory.Spawn(resultForm, VehicleSide.Ally, position);
+            RatAgent result = factory.Spawn(resultDefinition, VehicleSide.Ally, position);
 
             if (result == null)
             {
@@ -1960,7 +1961,7 @@ namespace SiegeCore.Player
                 return;
             }
 
-            int additionalRanks = Mathf.Max(0, _rat.Definition.BasicCount - 1);
+            int additionalRanks = Mathf.Max(0, (int)_rat.Definition.Rank - 1);
             if (additionalRanks == 0)
             {
                 return;

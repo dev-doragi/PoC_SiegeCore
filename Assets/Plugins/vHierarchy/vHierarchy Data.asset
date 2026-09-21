@@ -19,9 +19,19 @@ MonoBehaviour:
     - goDatas_byGlobalId:
         keys:
         - globalObjectIdString: GlobalObjectId_V1-2-1bcb6a3a6c5caa74f802dafb8b67bbcd-501205954-0
+        - globalObjectIdString: GlobalObjectId_V1-2-1bcb6a3a6c5caa74f802dafb8b67bbcd-944346117-0
+        - globalObjectIdString: GlobalObjectId_V1-2-1bcb6a3a6c5caa74f802dafb8b67bbcd-844662683-0
         values:
         - colorIndex: 0
           iconNameOrGuid: Settings Icon
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 0
+          iconNameOrGuid: Canvas Icon
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 0
+          iconNameOrGuid: Camera Icon
           isIconRecursive: 0
           isColorRecursive: 0
   bookmarks: []

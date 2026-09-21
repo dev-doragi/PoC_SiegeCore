@@ -9,6 +9,7 @@ namespace SiegeCore.Player
         private Vector2 _screenPosition;
         private Vector2 _aimDirection = Vector2.right;
         private bool _hasScreenPosition;
+        private bool _inputLocked;
 
         public Vector2 AimDirection
         {
@@ -38,23 +39,36 @@ namespace SiegeCore.Player
         private void OnEnable()
         {
             EventBus.Instance.Subscribe<LookInputEvent>(HandleLookInput);
+            EventBus.Instance.Subscribe<BattlefieldViewChangedEvent>(HandleBattlefieldViewChanged);
         }
 
         private void OnDisable()
         {
             EventBus.Instance.Unsubscribe<LookInputEvent>(HandleLookInput);
+            EventBus.Instance.Unsubscribe<BattlefieldViewChangedEvent>(HandleBattlefieldViewChanged);
             _hasScreenPosition = false;
+            _inputLocked = false;
         }
 
         private void HandleLookInput(LookInputEvent inputEvent)
         {
+            if (_inputLocked)
+            {
+                return;
+            }
+
             _screenPosition = inputEvent.Value;
             _hasScreenPosition = true;
         }
 
+        private void HandleBattlefieldViewChanged(BattlefieldViewChangedEvent eventMessage)
+        {
+            _inputLocked = eventMessage.IsActive;
+        }
+
         private void RefreshAim()
         {
-            if (!_hasScreenPosition) return;
+            if (_inputLocked || !_hasScreenPosition) return;
             if (_aimCamera == null) _aimCamera = Camera.main;
             if (_aimCamera == null) return;
 

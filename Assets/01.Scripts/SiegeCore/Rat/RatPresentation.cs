@@ -40,6 +40,7 @@ namespace SiegeCore.Rat
         private Vector3 _baseScale;
         private Vector3 _basePosition;
         private int _groundSortingOrder;
+        private Sprite _prefabGroundSprite;
 
         private float _animationSeed;
         private Tween _deathTween;
@@ -59,6 +60,9 @@ namespace SiegeCore.Rat
             _baseScale = _renderer.transform.localScale;
             _basePosition = _renderer.transform.localPosition;
             _groundSortingOrder = _renderer.sortingOrder;
+            _prefabGroundSprite = _renderer.sprite != null
+                ? _renderer.sprite
+                : _groundSprite;
             _animationSeed = Random.Range(0f, Mathf.PI * 2f);
         }
 
@@ -145,7 +149,9 @@ namespace SiegeCore.Rat
                 case RatState.Idle:
                 case RatState.Groggy:
                 case RatState.GroundCombat:
-                    _renderer.sprite = _groundSprite;
+                    _renderer.sprite = _prefabGroundSprite != null
+                        ? _prefabGroundSprite
+                        : _groundSprite;
                     break;
 
                 case RatState.Carried:

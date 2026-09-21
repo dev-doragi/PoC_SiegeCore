@@ -18,6 +18,7 @@ public class InputReader : Singleton<InputReader>
     [SerializeField] private string _submitActionName = "Submit";
     [SerializeField] private string _cancelActionName = "Cancel";
     [SerializeField] private string _pauseActionName = "Pause";
+    [SerializeField] private string _battlefieldViewActionName = "BattlefieldView";
 
     [SerializeField] private InputActionAsset _actions;
     private InputActionAsset _runtimeActions;
@@ -31,6 +32,7 @@ public class InputReader : Singleton<InputReader>
     private InputAction _submit;
     private InputAction _cancel;
     private InputAction _pause;
+    private InputAction _battlefieldView;
 
     private GameManager _game;
 
@@ -64,6 +66,7 @@ public class InputReader : Singleton<InputReader>
         _submit = RequireAction(_uiMap, _submitActionName);
         _cancel = RequireAction(_uiMap, _cancelActionName);
         _pause = RequireAction(_uiMap, _pauseActionName);
+        _battlefieldView = RequireAction(_uiMap, _battlefieldViewActionName);
 
     }
 
@@ -116,6 +119,7 @@ public class InputReader : Singleton<InputReader>
         _submit.performed += OnSubmit;
         _cancel.performed += OnCancel;
         _pause.performed += OnPause;
+        _battlefieldView.performed += OnBattlefieldView;
     }
 
     private void Unbind()
@@ -155,6 +159,10 @@ public class InputReader : Singleton<InputReader>
         if (_pause != null)
         {
             _pause.performed -= OnPause;
+        }
+        if (_battlefieldView != null)
+        {
+            _battlefieldView.performed -= OnBattlefieldView;
         }
     }
 
@@ -225,5 +233,27 @@ public class InputReader : Singleton<InputReader>
     private void OnPause(InputAction.CallbackContext _)
     {
         _game.TogglePause();
+    }
+
+    private static void OnBattlefieldView(InputAction.CallbackContext _)
+    {
+        EventBus.Instance.Publish(new BattlefieldViewInputEvent());
+    }
+
+    public void SetPlayerActionsEnabled(bool enabled)
+    {
+        if (_playerMap == null)
+        {
+            return;
+        }
+
+        if (enabled)
+        {
+            _playerMap.Enable();
+            return;
+        }
+
+        _playerMap.Disable();
+        EventBus.Instance.Publish(new MoveInputEvent { Value = Vector2.zero });
     }
 }

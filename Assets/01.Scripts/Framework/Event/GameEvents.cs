@@ -89,6 +89,7 @@ public struct EnergyChangedEvent
 public struct SubmitInputEvent { }
 public struct CancelInputEvent { }
 public struct PauseInputEvent { }
+public struct BattlefieldViewInputEvent { }
 
 public struct PrimaryActionInputEvent
 {
@@ -98,4 +99,9 @@ public struct PrimaryActionInputEvent
 public struct SecondaryActionInputEvent
 {
     public bool IsPressed;
+}
+
+public struct BattlefieldViewChangedEvent
+{
+    public bool IsActive;
 }

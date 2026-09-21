@@ -45,6 +45,8 @@ namespace SiegeCore.Rat
         private CarryableObject _carryable;
         private RatFactory _factory;
         private RatGroundAI _groundAI;
+        private GroundBlocker _groundBlocker;
+        private GroundBlockTarget _groundBlockTarget;
         private PooledObject _pooledObject;
         private SiegeCore.Projectile.Projectile _projectile;
 
@@ -54,8 +56,6 @@ namespace SiegeCore.Rat
 
         private float _landingGroggyDuration;
         private float _groggyUntil;
-
-        private bool _burst;
         private bool _suppressCarryEvent;
 
         [NonSerialized]
@@ -138,6 +138,16 @@ namespace SiegeCore.Rat
             get { return _state == RatState.GroundCombat; }
         }
 
+        public GroundBlocker GroundBlocker
+        {
+            get { return _groundBlocker; }
+        }
+
+        public GroundBlockTarget GroundBlockTarget
+        {
+            get { return _groundBlockTarget; }
+        }
+
         /// <summary>지상 행동 중이거나 빠따 비행 중인 Rat을 타격할 수 있다.</summary>
         public bool CanBeHitByBat
         {
@@ -197,6 +207,8 @@ namespace SiegeCore.Rat
         {
             _carryable = GetComponent<CarryableObject>();
             _groundAI = GetComponent<RatGroundAI>();
+            _groundBlocker = GetComponent<GroundBlocker>();
+            _groundBlockTarget = GetComponent<GroundBlockTarget>();
             _pooledObject = GetComponent<PooledObject>();
             _projectile = GetComponent<SiegeCore.Projectile.Projectile>();
 
@@ -225,12 +237,21 @@ namespace SiegeCore.Rat
             _landingState = RatState.Idle;
             _groggyUntil = 0f;
             _landingGroggyDuration = 0f;
-            _burst = false;
             _suppressCarryEvent = false;
             ProjectileSourceSlot = null;
             AttackSide = Faction;
             Health = 0f;
             _factory = null;
+
+            if (_groundBlocker != null)
+            {
+                _groundBlocker.ReleaseAll();
+            }
+
+            if (_groundBlockTarget != null)
+            {
+                _groundBlockTarget.ReleaseBlocker();
+            }
         }
 
         public void ClearStateHistory()
@@ -274,9 +295,7 @@ namespace SiegeCore.Rat
             AttackSide = faction;
             ProjectileSourceSlot = null;
 
-            Health = _definition.Health;
-
-            _burst = false;
+            Health = _definition.Ground.Health;
             _groggyUntil = 0f;
             _landingGroggyDuration = 0f;
 
@@ -859,7 +878,7 @@ namespace SiegeCore.Rat
 
         public void TakeDamage(DamageData damageData)
         {
-            if (damageData.AttackerSide == Faction)
+            if (!damageData.IsNeutral && damageData.AttackerSide == Faction)
             {
                 return;
             }
@@ -874,27 +893,21 @@ namespace SiegeCore.Rat
                 return;
             }
 
+            bool groundDeath = _state == RatState.GroundCombat
+                || ((_state == RatState.Airborne || _state == RatState.Groggy)
+                    && (_groundReturnState == RatState.GroundCombat
+                        || _landingState == RatState.GroundCombat));
+            RatGroundAI groundAI = GetComponent<RatGroundAI>();
+            bool infiltrated = groundAI != null && groundAI.IsInfiltrated;
             ChangeState(RatState.Dead);
 
-            TryBurstContents();
-
-            Died?.Invoke(this);
-        }
-
-        public void TryBurstContents()
-        {
-            if (_burst
-                || !_definition.CanBurst
-                || _factory == null)
+            if (groundDeath && _definition.GroundDeathAbility != null)
             {
-                return;
+                _definition.GroundDeathAbility.OnGroundDeath(
+                    new GroundDeathAbilityContext(_factory, Faction, transform.position, infiltrated));
             }
 
-            _burst = true;
-
-            _factory.Burst(
-                Faction,
-                transform.position);
+            Died?.Invoke(this);
         }
 
         public void Release()

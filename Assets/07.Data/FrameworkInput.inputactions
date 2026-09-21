@@ -164,6 +164,15 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "BattlefieldView",
+                    "type": "Button",
+                    "id": "a2f2afc1-5db7-4d17-9f52-47c4c9c8b4d1",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -197,6 +206,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "Pause",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "c1fbd0b6-3fb5-4a12-96dc-9a8f26a4c954",
+                    "path": "<Keyboard>/tab",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "BattlefieldView",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

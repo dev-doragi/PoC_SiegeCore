@@ -45,6 +45,7 @@ public static class FrameworkSetup
         ui.AddAction("Submit", InputActionType.Button, "<Keyboard>/enter");
         ui.AddAction("Cancel", InputActionType.Button, "<Keyboard>/backspace");
         ui.AddAction("Pause", InputActionType.Button, "<Keyboard>/escape");
+        ui.AddAction("BattlefieldView", InputActionType.Button, "<Keyboard>/tab");
         File.WriteAllText(inputPath, input.ToJson());
         UnityEngine.Object.DestroyImmediate(input);
         AssetDatabase.ImportAsset(inputPath);

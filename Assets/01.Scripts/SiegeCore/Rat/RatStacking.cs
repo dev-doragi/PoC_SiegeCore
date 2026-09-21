@@ -11,6 +11,7 @@ namespace SiegeCore.Rat
     public sealed class RatStacking : MonoBehaviour
     {
         [SerializeField] private RatFactory _factory;
+        [SerializeField] private RatMergeResolver _mergeResolver;
         [SerializeField, Min(0.05f)]
         private float _stageDuration = 0.6f;
 
@@ -23,6 +24,7 @@ namespace SiegeCore.Rat
         private Tween _mergeTween;
 
         private float _elapsed;
+        private bool _inputLocked;
 
         public bool IsStacking { get; private set; }
 
@@ -41,7 +43,7 @@ namespace SiegeCore.Rat
         }
 
         public event Action<float> ProgressChanged;
-        public event Action<RatForm> StageCompleted;
+        public event Action<RatDefinition> StageCompleted;
         public event Action StageCancelled;
 
         private void Awake()
@@ -51,6 +53,8 @@ namespace SiegeCore.Rat
 
         private void OnEnable()
         {
+            EventBus.Instance.Subscribe<BattlefieldViewChangedEvent>(HandleBattlefieldViewChanged);
+
             _stackAction = new InputAction(
                 "Stack",
                 InputActionType.Button,
@@ -61,7 +65,9 @@ namespace SiegeCore.Rat
 
         private void OnDisable()
         {
+            EventBus.Instance.Unsubscribe<BattlefieldViewChangedEvent>(HandleBattlefieldViewChanged);
             Cancel();
+            _inputLocked = false;
 
             if (_stackAction != null)
             {
@@ -72,7 +78,7 @@ namespace SiegeCore.Rat
 
         private void Update()
         {
-            if (Time.timeScale <= 0f)
+            if (_inputLocked || Time.timeScale <= 0f)
             {
                 return;
             }
@@ -80,6 +86,15 @@ namespace SiegeCore.Rat
             Tick(
                 _stackAction.IsPressed(),
                 Time.deltaTime);
+        }
+
+        private void HandleBattlefieldViewChanged(BattlefieldViewChangedEvent eventMessage)
+        {
+            _inputLocked = eventMessage.IsActive;
+            if (_inputLocked)
+            {
+                Cancel();
+            }
         }
 
         public bool CanStack()
@@ -91,14 +106,14 @@ namespace SiegeCore.Rat
                 return false;
             }
 
-            if (_carry.HeldCount < 2)
+            if (_mergeResolver == null || _carry.HeldCount < 2)
             {
                 return false;
             }
 
-            int totalBasicCount = 0;
+            RatDefinition accumulated = null;
 
-            for (int i = 0; i < _carry.HeldCount; i++)
+            for (int i = _carry.HeldCount - 1; i >= 0; i--)
             {
                 Component component =
                     _carry.GetHeld(i) as Component;
@@ -112,16 +127,16 @@ namespace SiegeCore.Rat
                     component.GetComponent<RatAgent>();
 
                 if (rat == null
-                    || rat.Faction != VehicleSide.Ally)
+                    || rat.Faction != VehicleSide.Ally || rat.Definition == null)
                 {
                     return false;
                 }
 
-                totalBasicCount +=
-                    rat.Definition.BasicCount;
+                if (accumulated == null) accumulated = rat.Definition;
+                else if (!_mergeResolver.TryResolve(accumulated, rat.Definition, out accumulated)) return false;
             }
 
-            return totalBasicCount <= 3;
+            return true;
         }
 
         public void Tick(
@@ -200,18 +215,12 @@ namespace SiegeCore.Rat
 
         private void CompleteStage()
         {
-            int count =
-                _upper.Definition.BasicCount
-                + _lower.Definition.BasicCount;
-
-            if (count < 2 || count > 3)
+            if (_upper == null || _lower == null || _mergeResolver == null
+                || !_mergeResolver.TryResolve(_upper.Definition, _lower.Definition, out RatDefinition resultDefinition))
             {
                 Cancel();
                 return;
             }
-
-            RatForm resultForm =
-                (RatForm)count;
 
             if (_mergeTween != null)
             {
@@ -220,7 +229,7 @@ namespace SiegeCore.Rat
             }
 
             RatAgent result = _factory.Spawn(
-                resultForm,
+                resultDefinition,
                 VehicleSide.Ally,
                 transform.position);
 
@@ -243,7 +252,7 @@ namespace SiegeCore.Rat
             _elapsed = 0f;
             _carry.InteractionLocked = false;
 
-            StageCompleted?.Invoke(resultForm);
+            StageCompleted?.Invoke(resultDefinition);
             ProgressChanged?.Invoke(0f);
         }
 

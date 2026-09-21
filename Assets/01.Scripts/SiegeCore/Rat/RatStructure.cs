@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using SiegeCore.Cannon;
 using SiegeCore.Combat;
@@ -20,11 +21,17 @@ namespace SiegeCore.Rat
         public float MaxHealth { get { return _maxHealth; } }
         public bool IsDestroyed { get { return Health <= 0f; } }
         public bool IsDead { get { return IsDestroyed; } }
+        public event Action<RatStructure> Destroyed;
+
+        private void Awake()
+        {
+            Health = _maxHealth;
+        }
 
         private void OnEnable()
         {
-            Health = _maxHealth;
             Active.Add(this);
+            if (IsDestroyed) ApplyDestroyedState();
         }
 
         private void OnDisable()
@@ -47,6 +54,7 @@ namespace SiegeCore.Rat
 
             ApplyDestroyedState();
             LogDestruction();
+            Destroyed?.Invoke(this);
         }
 
         public void TakeDamage(DamageData damageData)
@@ -74,7 +82,7 @@ namespace SiegeCore.Rat
             }
             else
             {
-                Debug.Log($"[Sabotage] {_faction} {name} destroyed (PoC log only).", this);
+                Debug.Log($"[Sabotage] {_faction} {name} destroyed.", this);
             }
         }
     }

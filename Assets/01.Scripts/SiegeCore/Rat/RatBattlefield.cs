@@ -143,7 +143,6 @@ namespace SiegeCore.Rat
                 float horizontalDistance =
                     Mathf.Abs(candidate.x - position.x);
                 float verticalDistance = position.y - candidate.y;
-
                 if (horizontalDistance > bestHorizontalDistance
                     || (Mathf.Approximately(
                             horizontalDistance,

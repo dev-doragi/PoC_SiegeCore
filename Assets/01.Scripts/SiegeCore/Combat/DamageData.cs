@@ -10,5 +10,6 @@ namespace SiegeCore.Combat
         public Vector2 HitPoint;
         public Vector2 KnockbackForce;
         public bool IsPiercing;
+        public bool IsNeutral;
     }
 }

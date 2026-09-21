@@ -6,6 +6,13 @@ using UnityEngine;
 
 namespace SiegeCore.Projectile
 {
+    public enum ProjectileEndReason
+    {
+        SiegeHit,
+        Cancelled,
+        Expired
+    }
+
     [RequireComponent(typeof(RatAgent))]
     [RequireComponent(typeof(CarryableObject))]
     [RequireComponent(typeof(Collider2D))]
@@ -93,8 +100,19 @@ namespace SiegeCore.Projectile
         {
             if (state == RatState.CannonFlight)
             {
+                bool wasActive = _isActive && !_resolved;
                 _isActive = true;
                 _resolved = false;
+
+                if (!wasActive)
+                {
+                    ProjectileAbility ability = _agent.Definition.ProjectileAbility;
+                    if (ability != null)
+                    {
+                        ability.OnLaunched(CreateContext(transform.position));
+                    }
+                }
+
                 return;
             }
 
@@ -147,8 +165,8 @@ namespace SiegeCore.Projectile
                 return;
             }
 
-            Resolve();
-            other.Resolve();
+            Resolve(ProjectileEndReason.Cancelled);
+            other.Resolve(ProjectileEndReason.Cancelled);
         }
 
         private void TryHitSiege(SiegeHealth siege)
@@ -161,14 +179,14 @@ namespace SiegeCore.Projectile
             siege.TakeDamage(new DamageData
             {
                 AttackerSide = Side,
-                Damage = _agent.Definition.ProjectileDamage,
+                Damage = _agent.Definition.Projectile.Damage,
                 HitPoint = transform.position
             });
 
-            Resolve();
+            Resolve(ProjectileEndReason.SiegeHit);
         }
 
-        public void Resolve()
+        public void Resolve(ProjectileEndReason reason = ProjectileEndReason.Expired)
         {
             if (!_isActive || _resolved)
             {
@@ -178,13 +196,35 @@ namespace SiegeCore.Projectile
             _resolved = true;
             _isActive = false;
 
-            /*
-             * BBB��� ���� Faction ���� Basic Rat�� �����Ѵ�.
-             * RatAgent ���ο��� �ߺ� Burst�� �����Ѵ�.
-             */
-            _agent.TryBurstContents();
+            ProjectileAbility ability = _agent.Definition.ProjectileAbility;
+            if (ability != null)
+            {
+                ProjectileContext context = CreateContext(transform.position);
+                if (reason == ProjectileEndReason.Cancelled)
+                {
+                    ability.OnCancelled(context);
+                }
+                else if (reason == ProjectileEndReason.SiegeHit)
+                {
+                    ability.OnSiegeHit(context);
+                }
+                else
+                {
+                    ability.OnExpired(context);
+                }
+            }
 
             _agent.Release();
+        }
+
+        private ProjectileContext CreateContext(Vector3 position)
+        {
+            return new ProjectileContext(
+                _agent,
+                _agent.Definition,
+                _agent.Faction,
+                position,
+                _agent.Factory);
         }
     }
 }

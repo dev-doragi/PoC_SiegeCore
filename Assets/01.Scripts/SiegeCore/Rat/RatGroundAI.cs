@@ -34,10 +34,13 @@ namespace SiegeCore.Rat
 
         private RatAgent _agent;
         private CarryableObject _carryable;
+        private GroundBlocker _blocker;
+        private GroundBlockTarget _blockTarget;
         private RatBattlefield _battlefield;
 
         private readonly List<Vector3> _path =
             new List<Vector3>();
+        private readonly List<Vector3> _targetPath = new List<Vector3>();
 
         private int _waypointIndex;
 
@@ -60,6 +63,8 @@ namespace SiegeCore.Rat
         {
             _agent = GetComponent<RatAgent>();
             _carryable = GetComponent<CarryableObject>();
+            _blocker = GetComponent<GroundBlocker>();
+            _blockTarget = GetComponent<GroundBlockTarget>();
         }
 
         private void OnEnable()
@@ -247,6 +252,13 @@ namespace SiegeCore.Rat
 
         private void UpdateCombat()
         {
+            RatAgent blockingEnemy = GetBlockingEnemy();
+            if (blockingEnemy != null)
+            {
+                UpdateRatTarget(blockingEnemy);
+                return;
+            }
+
             RatAgent enemy = FindNearestEnemy();
 
             if (enemy != null)
@@ -257,7 +269,9 @@ namespace SiegeCore.Rat
 
             if (_isInfiltrated)
             {
-                StopMovement();
+                RatStructure facility = FindProductionFacility();
+                if (facility != null) UpdateStructureTarget(facility);
+                else StopMovement();
                 return;
             }
 
@@ -287,13 +301,14 @@ namespace SiegeCore.Rat
         {
             RatAgent nearest = null;
             float nearestDistance = float.PositiveInfinity;
+            int nearestPriority = int.MinValue;
 
             foreach (RatAgent candidate in RatAgent.Active)
             {
                 if (candidate == null
                     || candidate == _agent
                     || candidate.Faction == _agent.Faction
-                    || candidate.State != RatState.GroundCombat)
+                    || !IsGroundTarget(candidate))
                 {
                     continue;
                 }
@@ -303,34 +318,90 @@ namespace SiegeCore.Rat
                     - _carryable.PhysicsPosition).sqrMagnitude;
 
                 float detectionRadius =
-                    _agent.Definition.DetectionRadius;
+                    _agent.Definition.Ground.DetectionRadius;
 
                 if (distance > detectionRadius * detectionRadius)
                 {
                     continue;
                 }
 
-                if (distance >= nearestDistance)
+                int priority = candidate.Definition.Ground.AttackPriority;
+                if (priority < nearestPriority
+                    || (priority == nearestPriority
+                        && distance >= nearestDistance))
                 {
                     continue;
                 }
 
+                if (_isInfiltrated && !CanReach(candidate.transform.position)) continue;
+
                 nearest = candidate;
                 nearestDistance = distance;
+                nearestPriority = priority;
             }
 
             return nearest;
         }
 
+        private bool IsGroundTarget(RatAgent candidate)
+        {
+            if (!_isInfiltrated) return candidate.State == RatState.GroundCombat;
+            return IsInsideEnemyBase(candidate.transform.position)
+                && (candidate.State == RatState.GroundCombat
+                    || candidate.State == RatState.Idle
+                    || candidate.State == RatState.Groggy);
+        }
+
+        private bool IsInsideEnemyBase(Vector3 position)
+        {
+            GroundGate gate = _battlefield.GetEnemyGate(_agent.Faction);
+            return gate != null && gate.ContainsBasePosition(position);
+        }
+
+        private bool CanReach(Vector3 position)
+        {
+            return _battlefield.TryPath(transform.position, position,
+                _agent.Faction, _targetPath, _agent.Definition.Ground.AttackRange);
+        }
+
+        private RatStructure FindProductionFacility()
+        {
+            RatStructure nearest = null;
+            float nearestDistance = float.PositiveInfinity;
+            foreach (RatStructure facility in RatStructure.Active)
+            {
+                if (facility == null || facility.IsEntrance || facility.IsDestroyed
+                    || facility.Faction == _agent.Faction
+                    || !IsInsideEnemyBase(facility.transform.position)) continue;
+                float distance = (facility.transform.position - transform.position).sqrMagnitude;
+                if (distance >= nearestDistance || !CanReach(facility.transform.position)) continue;
+                nearest = facility;
+                nearestDistance = distance;
+            }
+            return nearest;
+        }
+
         private void UpdateRatTarget(RatAgent target)
         {
+            if (target == null || target.IsDead)
+            {
+                StopMovement();
+                return;
+            }
+
             float distance = Vector2.Distance(
                 _carryable.PhysicsPosition,
                 target.transform.position);
 
-            if (distance <= _agent.Definition.AttackRange)
+            if (distance <= _agent.Definition.Ground.AttackRange)
             {
                 StopMovement();
+
+                if (_blocker != null && target.GroundBlockTarget != null)
+                {
+                    _blocker.TryBlock(target.GroundBlockTarget);
+                }
+
                 TryAttackRat(target);
                 return;
             }
@@ -340,16 +411,36 @@ namespace SiegeCore.Rat
 
         private void TryAttackRat(RatAgent target)
         {
-            if (Time.time < _nextAttackTime)
+            if (target == null || target.IsDead || Time.time < _nextAttackTime)
             {
                 return;
             }
 
             _nextAttackTime =
-                Time.time + _agent.Definition.AttackInterval;
+                Time.time + _agent.Definition.Ground.AttackInterval;
 
             target.TakeDamage(
-                _agent.Definition.AttackDamage);
+                _agent.Definition.Ground.AttackDamage);
+        }
+
+        private RatAgent GetBlockingEnemy()
+        {
+            if (_blockTarget == null || _blockTarget.Blocker == null)
+            {
+                return null;
+            }
+
+            RatAgent blocker = _blockTarget.Blocker.Agent;
+            if (blocker == null
+                || blocker.IsDead
+                || blocker.Faction == _agent.Faction
+                || !IsGroundTarget(blocker))
+            {
+                _blockTarget.ReleaseBlocker();
+                return null;
+            }
+
+            return blocker;
         }
 
         private void UpdateStructureTarget(
@@ -359,7 +450,7 @@ namespace SiegeCore.Rat
                 _carryable.PhysicsPosition,
                 target.transform.position);
 
-            if (distance <= _agent.Definition.AttackRange)
+            if (distance <= _agent.Definition.Ground.AttackRange)
             {
                 StopMovement();
                 TryAttackStructure(target);
@@ -378,11 +469,11 @@ namespace SiegeCore.Rat
             }
 
             _nextAttackTime =
-                Time.time + _agent.Definition.AttackInterval;
+                Time.time + _agent.Definition.Ground.AttackInterval;
 
             target.TakeDamage(
                 _agent.Faction,
-                _agent.Definition.AttackDamage);
+                _agent.Definition.Ground.AttackDamage);
         }
 
         private void UpdateDestroyedEntrance(GroundGate gate)
@@ -393,7 +484,7 @@ namespace SiegeCore.Rat
 
             if (Vector2.Distance(
                     _carryable.PhysicsPosition,
-                    target) <= _agent.Definition.AttackRange)
+                    target) <= _agent.Definition.Ground.AttackRange)
             {
                 StopMovement();
                 gate.TryEnterBase(_agent);
@@ -533,7 +624,7 @@ namespace SiegeCore.Rat
         {
             MoveToward(
                 target,
-                _agent.Definition.AttackRange);
+                _agent.Definition.Ground.AttackRange);
         }
 
         private void MoveToward(
@@ -564,7 +655,7 @@ namespace SiegeCore.Rat
             }
 
             MoveAlongPath(
-                _agent.Definition.MoveSpeed);
+                _agent.Definition.Ground.MoveSpeed);
         }
 
         private void MoveAlongPath(float speed)

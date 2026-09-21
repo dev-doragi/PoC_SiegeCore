@@ -54,6 +54,7 @@ namespace SiegeCore.Rat
 
         private void Update()
         {
+            if (Time.timeScale <= 0f) return;
             if (_battlefield == null || _enemyExit == null)
             {
                 return;

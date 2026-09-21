@@ -16,6 +16,8 @@ GameObject:
   - component: {fileID: 1188066156338834890}
   - component: {fileID: 2723632910628179223}
   - component: {fileID: 3922576104541050906}
+  - component: {fileID: 4012345678901234567}
+  - component: {fileID: 4012345678901234568}
   m_Layer: 8
   m_Name: Rat_Basic
   m_TagString: Untagged
@@ -114,6 +116,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 055cbb4043834fb2bef4258adb7de816, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Player.CarryableObject
+  _mergeResolver: {fileID: 11400000, guid: b2fb1f523067866418dfd39e2fe6d587, type: 2}
   _groundTilemap: {fileID: 0}
   _snapSteering: 12
   _snapFinishDuration: 0.12
@@ -136,6 +139,11 @@ MonoBehaviour:
   _squashRatio: 0.65
   _flightDecelerationPerRank: 1.5
   _fusionHeightTolerance: 0.45
+  _popupVerticalSpeedMultiplier: 0.6
+  _minimumPopupVerticalSpeed: 11
+  _maximumPopupVerticalSpeed: 12
+  _popupPlayerBlend: 0.35
+  _maximumPopupReturnSpeed: 8
   _defaultCannonFlightDuration: 3
   _defaultCannonArcHeight: 2
 --- !u!114 &2668117264886249552
@@ -209,6 +217,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3f17a998c9d840f9a91f08167a2f9642, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Projectile.Projectile
+--- !u!114 &4012345678901234567
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_GameObject: {fileID: 8591575405359856006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c2d4a3f9ce84378a1b2c4d5e6f70819, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.GroundBlocker
+--- !u!114 &4012345678901234568
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_GameObject: {fileID: 8591575405359856006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d3e5b4a0df95489b2c3d5e6f708192a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.GroundBlockTarget
 --- !u!1 &8899446616154975823
 GameObject:
   m_ObjectHideFlags: 0

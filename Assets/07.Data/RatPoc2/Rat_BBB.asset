@@ -12,11 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c559b67ba4afa87419fb4291268ff526, type: 3}
   m_Name: Rat_BBB
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatDefinition
-  Form: 3
+  Type: 0
+  Rank: 3
   DeadSprite: {fileID: 21300000, guid: 7f1237e1324f2f347a231683c63d3404, type: 3}
-  Health: 10
-  AttackDamage: 3
-  AttackInterval: 1
-  MoveSpeed: 2
-  AttackRange: 1.1
-  ProjectileDamage: 10
+  Ground:
+    Health: 30
+    AttackDamage: 9
+    AttackInterval: 1
+    MoveSpeed: 2
+    AttackRange: 1.1
+    DetectionRadius: 4
+    BlockCapacity: 3
+    BlockRequired: 1
+    AttackPriority: 0
+  Projectile:
+    Damage: 30
+    Weight: 2
+  ProjectileAbility: {fileID: 11400000, guid: d365a26af911aed4eb27b20a9d29f035, type: 2}
+  GroundDeathAbility: {fileID: 11400000, guid: f11567381c790284a8d5b265fdd3e8aa, type: 2}

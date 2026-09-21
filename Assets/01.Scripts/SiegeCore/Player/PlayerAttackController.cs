@@ -159,6 +159,7 @@ namespace SiegeCore.Player
         private void OnEnable()
         {
             EventBus.Instance.Subscribe<PrimaryActionInputEvent>(HandlePrimaryAction);
+            EventBus.Instance.Subscribe<BattlefieldViewChangedEvent>(HandleBattlefieldViewChanged);
         }
 
         private void OnDisable()
@@ -166,9 +167,18 @@ namespace SiegeCore.Player
             if (EventBus.Instance != null)
             {
                 EventBus.Instance.Unsubscribe<PrimaryActionInputEvent>(HandlePrimaryAction);
+                EventBus.Instance.Unsubscribe<BattlefieldViewChangedEvent>(HandleBattlefieldViewChanged);
             }
 
             CancelCharge();
+        }
+
+        private void HandleBattlefieldViewChanged(BattlefieldViewChangedEvent eventMessage)
+        {
+            if (eventMessage.IsActive)
+            {
+                CancelCharge();
+            }
         }
 
         private void Update()

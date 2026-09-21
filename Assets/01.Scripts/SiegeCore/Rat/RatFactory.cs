@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using SiegeCore.Cannon;
 using UnityEngine;
 
@@ -5,192 +7,109 @@ namespace SiegeCore.Rat
 {
     public sealed class RatFactory : MonoBehaviour
     {
-        [SerializeField]
-        private RatBattlefield _battlefield;
-
-        [Header("Pools")]
+        [SerializeField] private RatBattlefield _battlefield;
         [SerializeField] private PoolManager _poolManager;
-        [SerializeField] private PoolDefinition _basicPool;
-        [SerializeField] private PoolDefinition _bbPool;
-        [SerializeField] private PoolDefinition _bbbPool;
+        [SerializeField] private RatCatalog _catalog;
 
-        public RatBattlefield Battlefield
+        private readonly Dictionary<RatDefinition, PoolDefinition> _poolLookup =
+            new Dictionary<RatDefinition, PoolDefinition>();
+        private bool _lookupBuilt;
+        private bool _lookupValid;
+
+        public RatBattlefield Battlefield { get { return _battlefield; } }
+        public RatDefinition FallbackDefinition
         {
-            get { return _battlefield; }
+            get { return _catalog == null ? null : _catalog.FallbackDefinition; }
         }
 
         public bool IsReady
         {
-            get
-            {
-                return _battlefield != null
-                    && _basicPool != null
-                    && _bbPool != null
-                    && _bbbPool != null
-                    && EnsurePoolManager();
-            }
+            get { return _battlefield != null && EnsureLookup() && _poolManager != null && _poolManager.IsInitialized; }
         }
 
-        public RatAgent Spawn(
-            RatForm form,
-            VehicleSide faction,
-            Vector3 position,
-            bool combat = false,
-            bool falling = false)
+        private void Awake() { EnsureLookup(); }
+        private void OnValidate() { _lookupBuilt = false; }
+
+        private bool EnsureLookup()
         {
-            if (!EnsurePoolManager())
+            if (_lookupBuilt) return _lookupValid;
+            _lookupBuilt = true;
+            _lookupValid = _catalog != null
+                && _catalog.Entries != null
+                && _catalog.Entries.Length > 0;
+            _poolLookup.Clear();
+            if (!_lookupValid) return false;
+
+            if (!_catalog.HasValidFallback)
             {
-                return null;
-            }
-
-            PoolDefinition definition =
-                GetPoolDefinition(form);
-
-            if (definition == null)
-            {
-                return null;
-            }
-
-            GameObject instance =
-                _poolManager.Spawn(
-                    definition,
-                    position,
-                    Quaternion.identity);
-
-            RatAgent rat =
-                instance.GetComponent<RatAgent>();
-
-            if (rat == null)
-            {
-                PooledObject pooledObject =
-                    instance.GetComponent<PooledObject>();
-
-                if (pooledObject != null)
-                {
-                    pooledObject.Return();
-                }
-                else
-                {
-                    instance.SetActive(false);
-                }
-
                 Debug.LogError(
-                    "[RatFactory] Rat prefab must contain RatAgent.",
+                    "[RatFactory] RatCatalog needs a Basic Rank1 fallback Definition.",
                     this);
+                _lookupValid = false;
+            }
 
+            foreach (RatCatalogEntry entry in _catalog.Entries)
+            {
+                RatAgent prefab = entry.Pool != null && entry.Pool.Prefab != null
+                    ? entry.Pool.Prefab.GetComponent<RatAgent>() : null;
+                if (entry.Definition == null || prefab == null || prefab.Definition != entry.Definition
+                    || _poolLookup.ContainsKey(entry.Definition))
+                {
+                    Debug.LogError("[RatFactory] Each entry needs a unique Definition and a pool prefab with the same Definition.", this);
+                    _lookupValid = false;
+                    continue;
+                }
+                _poolLookup.Add(entry.Definition, entry.Pool);
+            }
+
+            if (_lookupValid && !_poolLookup.ContainsKey(_catalog.FallbackDefinition))
+            {
+                Debug.LogError(
+                    "[RatFactory] RatCatalog fallback Definition must also have a registered PoolDefinition.",
+                    this);
+                _lookupValid = false;
+            }
+
+            return _lookupValid;
+        }
+
+        public RatAgent Spawn(RatDefinition definition, VehicleSide faction, Vector3 position,
+            bool combat = false, bool falling = false)
+        {
+            if (!IsReady || definition == null || !_poolLookup.TryGetValue(definition, out PoolDefinition pool))
+                return null;
+
+            GameObject instance = _poolManager.Spawn(pool, position, Quaternion.identity);
+            if (instance == null) return null;
+
+            // A pooled rat can have been parented to a carry/projectile transform
+            // with a different local scale. Restore the root scale from the
+            // exact prefab that belongs to this pool before reinitializing it.
+            instance.transform.localScale = pool.Prefab.transform.localScale;
+
+            RatAgent rat = instance.GetComponent<RatAgent>();
+            if (rat == null || rat.Definition != definition)
+            {
+                PooledObject pooledObject = instance.GetComponent<PooledObject>();
+                if (pooledObject != null) pooledObject.Return();
+                else instance.SetActive(false);
+                Debug.LogError("[RatFactory] Spawned rat does not match the requested Definition.", this);
                 return null;
             }
 
-            rat.transform.SetPositionAndRotation(
-                position,
-                Quaternion.identity);
-
-            rat.ResetRat(
-                faction,
-                this,
-                combat,
-                falling);
-
+            rat.transform.SetPositionAndRotation(position, Quaternion.identity);
+            rat.ResetRat(faction, this, combat, falling);
             return rat;
         }
 
-        public RatAgent SpawnIdle(
-            VehicleSide faction,
-            Vector3 position)
+        public RatAgent SpawnIdle(RatDefinition definition, VehicleSide faction, Vector3 position)
         {
-            return Spawn(
-                RatForm.Basic,
-                faction,
-                position);
+            return Spawn(definition, faction, position);
         }
 
-        public RatAgent SpawnGroundCombat(
-            RatForm form,
-            VehicleSide faction,
-            Vector3 position)
+        public RatAgent SpawnGroundCombat(RatDefinition definition, VehicleSide faction, Vector3 position)
         {
-            return Spawn(
-                form,
-                faction,
-                position,
-                true,
-                false);
-        }
-
-        public void Burst(
-            VehicleSide faction,
-            Vector3 position)
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                Vector2 offset =
-                    Random.insideUnitCircle * 0.2f;
-
-                Vector3 spawnPosition =
-                    position
-                    + new Vector3(
-                        offset.x,
-                        offset.y,
-                        0f);
-
-                Vector3 landingPosition =
-                    _battlefield.FloorBelow(
-                        spawnPosition,
-                        faction);
-
-                RatAgent rat = Spawn(
-                    RatForm.Basic,
-                    faction,
-                    landingPosition,
-                    true,
-                    true);
-
-                if (rat != null)
-                {
-                    float fallHeight = Mathf.Max(
-                        0.1f,
-                        spawnPosition.y - landingPosition.y);
-
-                    rat.Carryable.BeginRatFall(
-                        _battlefield.Ground,
-                        fallHeight);
-                }
-            }
-        }
-
-        private bool EnsurePoolManager()
-        {
-            if (_basicPool == null
-                || _bbPool == null
-                || _bbbPool == null
-                || _basicPool.Prefab == null
-                || _bbPool.Prefab == null
-                || _bbbPool.Prefab == null)
-            {
-                return false;
-            }
-
-            return _poolManager != null
-                && _poolManager.IsInitialized;
-        }
-
-        private PoolDefinition GetPoolDefinition(
-            RatForm form)
-        {
-            switch (form)
-            {
-                case RatForm.Basic:
-                    return _basicPool;
-
-                case RatForm.BB:
-                    return _bbPool;
-
-                case RatForm.BBB:
-                    return _bbbPool;
-
-                default:
-                    return null;
-            }
+            return Spawn(definition, faction, position, true, false);
         }
     }
 }
