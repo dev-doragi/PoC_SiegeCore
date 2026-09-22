@@ -235,9 +235,11 @@ public static class SiegePocValidation
             VehicleSide.Ally,
             true,
             false,
-            out Vector3 battlefieldSplit),
+            out Vector3 battlefieldSplit,
+            out UnityEngine.Tilemaps.Tilemap battlefieldSplitGround),
             "General split finds battlefield floor");
-        Check(factory.Battlefield.BattlefieldGround.HasTile(
+        Check(battlefieldSplitGround == factory.Battlefield.BattlefieldGround
+            && factory.Battlefield.BattlefieldGround.HasTile(
                 factory.Battlefield.BattlefieldGround.WorldToCell(battlefieldSplit))
             && !factory.Battlefield.IsInsideAnyBase(battlefieldSplit),
             "General split excludes both bases");
@@ -249,7 +251,9 @@ public static class SiegePocValidation
                 VehicleSide.Ally,
                 true,
                 true,
-                out Vector3 infiltratedSplit)
+                out Vector3 infiltratedSplit,
+                out UnityEngine.Tilemaps.Tilemap infiltratedSplitGround)
+            && infiltratedSplitGround == factory.Battlefield.Ground
             && enemyGate.ContainsBasePosition(infiltratedSplit),
             "Infiltrated split finds target base floor");
         Check((enemyGate.ArenaPosition - enemyGate.BasePosition).sqrMagnitude > 0.0001f,

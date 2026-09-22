@@ -63,10 +63,20 @@ namespace SiegeCore.Summon
             if (battlefield != null
                 && battlefield.BattlefieldGround != null)
             {
-                Vector3 landingPosition =
-                    battlefield.GetBattlefieldCenterAtX(
+                Vector3 landingPosition;
+                if (battlefield.TryGetBattlefieldLandingPosition(
+                    _rigidbody.position.x,
+                    out landingPosition))
+                {
+                    _dropMotion.Begin(landingPosition, null);
+                }
+                else
+                {
+                    Active.Remove(this);
+                    landingPosition = battlefield.GetBattlefieldCenterAtX(
                         _rigidbody.position.x);
-                _dropMotion.Begin(landingPosition, null);
+                    _dropMotion.Begin(landingPosition, DestroySelf);
+                }
             }
             else if (battlefield != null)
             {
@@ -79,6 +89,12 @@ namespace SiegeCore.Summon
         private void FixedUpdate()
         {
             _dropMotion.Tick(Time.fixedDeltaTime);
+        }
+
+        private void DestroySelf()
+        {
+            _dropMotion.Cancel();
+            Destroy(gameObject);
         }
 
         public void TakeDamage(DamageData damageData)

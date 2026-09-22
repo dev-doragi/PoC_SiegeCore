@@ -214,9 +214,11 @@ namespace SiegeCore.Rat
             VehicleSide faction,
             bool onGround,
             bool infiltrated,
-            out Vector3 landingPosition)
+            out Vector3 landingPosition,
+            out Tilemap landingGround)
         {
             landingPosition = origin;
+            landingGround = null;
 
             if (infiltrated)
             {
@@ -231,6 +233,7 @@ namespace SiegeCore.Rat
                         !onGround,
                         out landingPosition))
                 {
+                    landingGround = _ground;
                     return true;
                 }
             }
@@ -244,6 +247,7 @@ namespace SiegeCore.Rat
                 !onGround,
                 out landingPosition))
             {
+                landingGround = _battlefieldGround;
                 return true;
             }
 
@@ -396,6 +400,22 @@ namespace SiegeCore.Rat
                 worldX,
                 worldCenter.y,
                 worldCenter.z);
+        }
+
+        public bool TryGetBattlefieldLandingPosition(
+            float worldX,
+            out Vector3 landingPosition)
+        {
+            landingPosition = new Vector3(worldX, transform.position.y, 0f);
+            if (_battlefieldGround == null)
+            {
+                return false;
+            }
+
+            landingPosition = GetBattlefieldCenterAtX(worldX);
+            Vector3Int landingCell =
+                _battlefieldGround.WorldToCell(landingPosition);
+            return _battlefieldGround.HasTile(landingCell);
         }
 
         public GroundGate GetOwnGate(VehicleSide faction)

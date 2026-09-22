@@ -4,6 +4,7 @@ using SiegeCore.Cannon;
 using SiegeCore.Combat;
 using SiegeCore.Player;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
 namespace SiegeCore.Rat
 {
@@ -46,6 +47,7 @@ namespace SiegeCore.Rat
         private RatFlightMotion _motion;
         public RatFlightMotion Motion { get { return _motion; } }
         public bool IsSpawned { get; private set; }
+        private bool _releaseOnLanding;
         private RatFactory _factory;
         private RatGroundBehaviour _groundBehaviour;
         public RatGroundBehaviour GroundBehaviour { get { return _groundBehaviour; } }
@@ -178,7 +180,7 @@ namespace SiegeCore.Rat
                 return _state == RatState.Idle
                     || _state == RatState.GroundCombat
                     || _state == RatState.Groggy
-                    || _state == RatState.Airborne;
+                    || (_state == RatState.Airborne && !_releaseOnLanding);
             }
         }
 
@@ -187,7 +189,9 @@ namespace SiegeCore.Rat
         {
             get
             {
-                if (_state != RatState.Airborne || !_motion.CanBeCaughtInFlight)
+                if (_releaseOnLanding
+                    || _state != RatState.Airborne
+                    || !_motion.CanBeCaughtInFlight)
                 {
                     return false;
                 }
@@ -268,6 +272,7 @@ namespace SiegeCore.Rat
             _landingState = RatState.Idle;
             _groggyUntil = 0f;
             _landingGroggyDuration = 0f;
+            _releaseOnLanding = false;
 
             ProjectileSourceSlot = null;
             AttackSide = Faction;
@@ -326,11 +331,24 @@ namespace SiegeCore.Rat
             return true;
         }
 
-        public void BeginFall(float height)
+        public void BeginFall(float height, Tilemap ground = null)
         {
             if (!IsSpawned || IsDead) return;
+            if (ground == null)
+            {
+                ground = _factory.Battlefield.Ground;
+            }
             BeginAirborne(_groundReturnState, 0f);
-            _motion.BeginRatFall(_factory.Battlefield.Ground, height);
+            _motion.BeginRatFall(ground, height);
+        }
+
+        public void BeginFallAndRelease(float height)
+        {
+            if (!IsSpawned || IsDead) return;
+
+            _releaseOnLanding = true;
+            BeginAirborne(_groundReturnState, 0f);
+            _motion.BeginRatFall(null, height);
         }
 
         public bool TryEnterCannon(
@@ -410,6 +428,7 @@ namespace SiegeCore.Rat
             Health = _definition.Ground.Health;
             _groggyUntil = 0f;
             _landingGroggyDuration = 0f;
+            _releaseOnLanding = false;
 
             RatState groundState =
                 combat ? RatState.GroundCombat : RatState.Idle;
@@ -547,6 +566,12 @@ namespace SiegeCore.Rat
 
             if (_state != RatState.Airborne)
             {
+                return;
+            }
+
+            if (_releaseOnLanding)
+            {
+                Release();
                 return;
             }
 

@@ -1,5 +1,6 @@
 using SiegeCore.Cannon;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
 namespace SiegeCore.Rat
 {
@@ -14,12 +15,33 @@ namespace SiegeCore.Rat
             {
                 Vector2 offset = Random.insideUnitCircle * 0.2f;
                 Vector3 spawnPosition = position + new Vector3(offset.x, offset.y, 0f);
+
+                Vector3 floorPosition;
+                if (!battlefield.TryGetBattlefieldLandingPosition(
+                    spawnPosition.x,
+                    out floorPosition))
+                {
+                    RatAgent fallingRat = factory.Spawn(
+                        definition,
+                        faction,
+                        floorPosition,
+                        true,
+                        false);
+                    if (fallingRat == null) continue;
+
+                    float discardFallHeight =
+                        Mathf.Max(0.1f, spawnPosition.y - floorPosition.y);
+                    fallingRat.BeginFallAndRelease(discardFallHeight);
+                    continue;
+                }
+
                 if (!battlefield.TryFindSplitLandingPosition(
                     spawnPosition,
                     faction,
                     onGround,
                     infiltrated,
-                    out Vector3 landingPosition))
+                    out Vector3 landingPosition,
+                    out Tilemap landingGround))
                 {
                     Debug.LogWarning(
                         "[BasicRatSplit] No valid split landing position was found.",
@@ -32,7 +54,7 @@ namespace SiegeCore.Rat
                 RatGroundBehaviour groundAI = rat.GroundBehaviour;
                 if (infiltrated && groundAI != null) groundAI.BeginBaseInfiltration();
                 float fallHeight = Mathf.Max(0.1f, spawnPosition.y - landingPosition.y);
-                rat.BeginFall(fallHeight);
+                rat.BeginFall(fallHeight, landingGround);
             }
         }
     }

@@ -21,6 +21,7 @@ namespace SiegeCore.Summon
         private VehicleSide _attackerSide;
         private GroundDropMotion _dropMotion;
         private bool _detonated;
+        private bool _destroyWithoutDetonation;
 
         private void Awake()
         {
@@ -45,6 +46,7 @@ namespace SiegeCore.Summon
             _groundLayers = groundLayers;
             _targetLayers = targetLayers.value == 0 ? Physics2D.AllLayers : targetLayers;
             _detonated = false;
+            _destroyWithoutDetonation = false;
 
             if (_rigidbody == null)
             {
@@ -54,10 +56,20 @@ namespace SiegeCore.Summon
             if (battlefield != null
                 && battlefield.BattlefieldGround != null)
             {
-                Vector3 landingPosition =
-                    battlefield.GetBattlefieldCenterAtX(
+                Vector3 landingPosition;
+                if (battlefield.TryGetBattlefieldLandingPosition(
+                    _rigidbody.position.x,
+                    out landingPosition))
+                {
+                    _dropMotion.Begin(landingPosition, Detonate);
+                }
+                else
+                {
+                    _destroyWithoutDetonation = true;
+                    landingPosition = battlefield.GetBattlefieldCenterAtX(
                         _rigidbody.position.x);
-                _dropMotion.Begin(landingPosition, Detonate);
+                    _dropMotion.Begin(landingPosition, DestroyWithoutDetonation);
+                }
                 return;
             }
 
@@ -81,7 +93,14 @@ namespace SiegeCore.Summon
         {
             if (!_detonated && Time.time >= _destroyAt)
             {
-                Detonate();
+                if (_destroyWithoutDetonation)
+                {
+                    DestroyWithoutDetonation();
+                }
+                else
+                {
+                    Detonate();
+                }
             }
         }
 
@@ -163,6 +182,13 @@ namespace SiegeCore.Summon
                 });
             }
 
+            Destroy(gameObject);
+        }
+
+        private void DestroyWithoutDetonation()
+        {
+            _detonated = true;
+            _dropMotion.Cancel();
             Destroy(gameObject);
         }
 
