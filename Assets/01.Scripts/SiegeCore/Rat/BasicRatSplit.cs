@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace SiegeCore.Rat
 {
-    internal static class BasicRatSplit
+    public static class BasicRatSplit
     {
         public static void Spawn(RatDefinition definition, RatFactory factory, VehicleSide faction,
             Vector3 position, bool onGround, bool infiltrated)
@@ -14,9 +14,19 @@ namespace SiegeCore.Rat
             {
                 Vector2 offset = Random.insideUnitCircle * 0.2f;
                 Vector3 spawnPosition = position + new Vector3(offset.x, offset.y, 0f);
-                Vector3 landingPosition = onGround
-                    ? battlefield.NearestFloor(spawnPosition, faction)
-                    : battlefield.FloorBelow(spawnPosition, faction);
+                if (!battlefield.TryFindSplitLandingPosition(
+                    spawnPosition,
+                    faction,
+                    onGround,
+                    infiltrated,
+                    out Vector3 landingPosition))
+                {
+                    Debug.LogWarning(
+                        "[BasicRatSplit] No valid split landing position was found.",
+                        factory);
+                    continue;
+                }
+
                 RatAgent rat = factory.Spawn(definition, faction, landingPosition, true, true);
                 if (rat == null) continue;
                 RatGroundBehaviour groundAI = rat.GroundBehaviour;

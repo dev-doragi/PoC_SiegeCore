@@ -8,7 +8,7 @@ using UnityEngine;
 namespace SiegeCore.Rat
 {
     [RequireComponent(typeof(CarryableObject))]
-    public sealed class RatAgent : MonoBehaviour, IDamageable
+    public sealed class RatAgent : MonoBehaviour, IDamageable, IGroundCombatTarget
     {
         public static readonly HashSet<RatAgent> Active = new HashSet<RatAgent>();
 
@@ -126,6 +126,24 @@ namespace SiegeCore.Rat
             get { return _state == RatState.Dead; }
         }
 
+        public Transform TargetTransform
+        {
+            get { return transform; }
+        }
+
+        public int AttackPriority
+        {
+            get
+            {
+                if (_definition == null)
+                {
+                    return int.MinValue;
+                }
+
+                return _definition.Ground.AttackPriority;
+            }
+        }
+
         // ���� Projectile���� ���.
         public VehicleSide AttackSide { get; private set; }
         public CannonSlot ProjectileSourceSlot { get; private set; }
@@ -190,6 +208,7 @@ namespace SiegeCore.Rat
                 if (_state == RatState.Dead
                     || _state == RatState.Carried
                     || _state == RatState.Airborne
+                    || _state == RatState.CannonLoading
                     || _state == RatState.Loaded
                     || _state == RatState.CannonFlight)
                 {
@@ -234,6 +253,11 @@ namespace SiegeCore.Rat
 
         private void OnDisable()
         {
+            if (_motion != null)
+            {
+                _motion.CancelCannonLoading();
+            }
+
             Active.Remove(this);
             IsSpawned = false;
             Released?.Invoke(this);
@@ -261,7 +285,7 @@ namespace SiegeCore.Rat
             }
         }
 
-        internal void CompleteSpawn()
+        public void CompleteSpawn()
         {
             IsSpawned = true;
             Active.Add(this);
@@ -309,13 +333,36 @@ namespace SiegeCore.Rat
             _motion.BeginRatFall(_factory.Battlefield.Ground, height);
         }
 
-        internal bool TryEnterCannon(Transform storagePoint, bool fromIdle = false)
+        public bool TryEnterCannon(
+            Transform storagePoint,
+            bool fromIdle,
+            float loadingDuration)
         {
-            if (!IsSpawned || IsDead || _projectile == null) return false;
-            if (fromIdle && _state != RatState.Idle) return false;
-            if (!fromIdle && !CanLoadIntoCannon) return false;
-            if (!_motion.TryEnterCannon(storagePoint, fromIdle)) return false;
-            EnterLoaded();
+            if (!IsSpawned || IsDead || _projectile == null)
+            {
+                return false;
+            }
+
+            if (fromIdle && _state != RatState.Idle)
+            {
+                return false;
+            }
+
+            if (!fromIdle && !CanLoadIntoCannon)
+            {
+                return false;
+            }
+
+            if (!_motion.TryEnterCannon(
+                storagePoint,
+                fromIdle,
+                loadingDuration,
+                CompleteCannonLoading))
+            {
+                return false;
+            }
+
+            ChangeState(RatState.CannonLoading);
             return true;
         }
 
@@ -400,6 +447,13 @@ namespace SiegeCore.Rat
             if (_state == nextState)
             {
                 return;
+            }
+
+            if (nextState == RatState.Dead
+                && _motion != null
+                && (_motion.IsCannonLoading || _motion.IsLoaded))
+            {
+                _motion.CancelCannonLoading();
             }
 
             RatState previousState = _state;
@@ -536,6 +590,7 @@ namespace SiegeCore.Rat
         {
             if (_state == RatState.Dead
                 || _state == RatState.Carried
+                || _state == RatState.CannonLoading
                 || _state == RatState.Loaded
                 || _state == RatState.CannonFlight
                 || _state == RatState.Airborne)
@@ -701,7 +756,8 @@ namespace SiegeCore.Rat
                 return;
             }
 
-            if (_state == RatState.Loaded
+            if (_state == RatState.CannonLoading
+                || _state == RatState.Loaded
                 || _state == RatState.CannonFlight)
             {
                 _groggyUntil = 0f;
@@ -749,6 +805,17 @@ namespace SiegeCore.Rat
             RatFactory factory,
             Vector3 position)
         {
+            EnterGroundCombat(
+                factory,
+                position,
+                factory.Battlefield.Ground);
+        }
+
+        public void EnterGroundCombat(
+            RatFactory factory,
+            Vector3 position,
+            UnityEngine.Tilemaps.Tilemap groundTilemap)
+        {
             if (_state == RatState.Dead)
             {
                 return;
@@ -756,8 +823,7 @@ namespace SiegeCore.Rat
 
             _factory = factory;
 
-            _motion.ResetForRat(
-                factory.Battlefield.Ground);
+            _motion.ResetForRat(groundTilemap);
 
             transform.position = position;
 
@@ -778,14 +844,27 @@ namespace SiegeCore.Rat
             EnterGroundCombat(factory, position);
         }
 
-        public void TeleportAirborne(Vector3 position)
+        public void TransferAirborneToArena(
+            RatFactory factory,
+            Vector3 position,
+            UnityEngine.Tilemaps.Tilemap groundTilemap,
+            Vector2 velocity,
+            float bounceSpeed)
         {
             if (_state != RatState.Airborne)
             {
                 return;
             }
 
-            _motion.RelocateAirborne(position);
+            _factory = factory;
+            _groundReturnState = RatState.GroundCombat;
+            _landingState = RatState.GroundCombat;
+            _landingGroggyDuration = 0f;
+            _motion.RelocateAirborne(
+                position,
+                groundTilemap,
+                velocity,
+                bounceSpeed);
         }
 
         /// <summary>강제 전체 Drop에서 Carry 상태와 실제 Carryable 상태를 함께 정리한다.</summary>
@@ -821,6 +900,27 @@ namespace SiegeCore.Rat
         {
             _groggyUntil = 0f;
             ChangeState(RatState.Loaded);
+        }
+
+        private void CompleteCannonLoading()
+        {
+            if (_state == RatState.CannonLoading)
+            {
+                EnterLoaded();
+            }
+        }
+
+        public void CancelCannonLoading()
+        {
+            if (!IsSpawned
+                || _motion == null
+                || !_motion.IsCannonLoading)
+            {
+                return;
+            }
+
+            _motion.CancelCannonLoading();
+            ChangeState(_groundReturnState);
         }
 
         public bool LaunchFromCannon(

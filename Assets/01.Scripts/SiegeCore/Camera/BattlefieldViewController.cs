@@ -35,7 +35,7 @@ namespace SiegeCore.Cameras
 
             if (IsBattlefieldView && InputReader.IsExisted)
             {
-                InputReader.Instance.SetPlayerActionsEnabled(true);
+                InputReader.Instance.SetCombatActionsEnabled(true);
             }
 
             IsBattlefieldView = false;
@@ -86,7 +86,7 @@ namespace SiegeCore.Cameras
 
             if (InputReader.IsExisted)
             {
-                InputReader.Instance.SetPlayerActionsEnabled(!active);
+                InputReader.Instance.SetCombatActionsEnabled(!active);
             }
         }
 

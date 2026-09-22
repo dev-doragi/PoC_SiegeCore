@@ -176,6 +176,8 @@ MonoBehaviour:
   _idleDelayRange: {x: 0.25, y: 1.2}
   _repathInterval: 0.3
   _assignmentArrivalDistance: 0.35
+  _attackEnterBuffer: 0.1
+  _attackExitBuffer: 0.25
 --- !u!114 &2723632910628179223
 MonoBehaviour:
   m_ObjectHideFlags: 0

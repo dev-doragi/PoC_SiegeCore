@@ -185,6 +185,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Summon.Barricade
   _defaultHealth: 20
+  _attackPriority: 20
 --- !u!50 &2000000000000000004
 Rigidbody2D:
   serializedVersion: 5

@@ -37,6 +37,9 @@ namespace SiegeCore.Player
         [SerializeField, Tooltip("CatchOrigin을 기준으로 Catch Area 중심을 이동합니다.")]
         private Vector2 _catchAreaOffset = Vector2.zero;
 
+        [SerializeField, Min(0f), Tooltip("Catch 판정을 다시 활성화하기 전에 지면 기준으로 Catch Area 밖으로 더 나가야 하는 여유 거리입니다.")]
+        private float _catchAreaExitMargin = 0.1f;
+
         [Header("Airborne Catch - Response")]
         [SerializeField, Min(0.01f), Tooltip("Catch된 Rat이 현재 공중 위치에서 HoldPoint까지 이동하는 시간입니다.")]
         private float _catchTweenDuration = 0.12f;
@@ -64,6 +67,7 @@ namespace SiegeCore.Player
         private Vector3 _holdOffset;
         private readonly List<ICarryable> _heldObjects = new List<ICarryable>();
         private readonly Dictionary<ICarryable, CarrySorting> _carrySorting = new Dictionary<ICarryable, CarrySorting>();
+        private readonly HashSet<CarryableObject> _catchAreaExitedItems = new HashSet<CarryableObject>();
         private int _carriedLayerId;
         private bool _handlingEnemyRecovery;
 
@@ -140,6 +144,7 @@ namespace SiegeCore.Player
                 EventBus.Instance.Unsubscribe<SecondaryActionInputEvent>(HandleSecondaryAction);
             }
             DropAll();
+            _catchAreaExitedItems.Clear();
             // Also restore objects still in their initial airborne arc.
             List<ICarryable> pending = new List<ICarryable>(_carrySorting.Keys);
             foreach (ICarryable item in pending) RestoreCarrySorting(item);
@@ -188,11 +193,23 @@ namespace SiegeCore.Player
             {
                 if (rat == null) continue;
                 CarryableObject item = rat.Carryable;
-                Vector2 visualPosition = item.CatchVisualPosition;
-                float distance = Vector2.Distance(visualPosition, catchAreaCenter);
+                if (item == null || !item.IsAirborne)
+                {
+                    if (item != null) _catchAreaExitedItems.Remove(item);
+                    continue;
+                }
+
+                Vector2 groundPosition = item.CatchGroundPosition;
+                if (IsOutsideCatchAreaWithMargin(groundPosition))
+                {
+                    _catchAreaExitedItems.Add(item);
+                }
+
+                float distance = Vector2.Distance(groundPosition, catchAreaCenter);
                 if (!rat.CanBeCaught
                     || item.FallDistanceFromPeak < _minimumCatchFallDistance) continue;
-                if (!IsInsideCatchArea(visualPosition)
+                if (!_catchAreaExitedItems.Contains(item)
+                    || !IsInsideCatchArea(groundPosition)
                     || distance >= bestDistance) continue;
                 best = item;
                 bestDistance = distance;
@@ -207,9 +224,9 @@ namespace SiegeCore.Player
             return origin + _catchAreaOffset;
         }
 
-        private bool IsInsideCatchArea(Vector2 visualPosition)
+        private bool IsInsideCatchArea(Vector2 groundPosition)
         {
-            Vector2 offset = visualPosition - GetCatchAreaCenter();
+            Vector2 offset = groundPosition - GetCatchAreaCenter();
             float horizontalRadius = Mathf.Max(0.1f, _catchHorizontalRadius);
             float verticalRadius = Mathf.Max(0.1f, _catchVerticalRadius);
             float normalizedX = offset.x / horizontalRadius;
@@ -217,10 +234,23 @@ namespace SiegeCore.Player
             return normalizedX * normalizedX + normalizedY * normalizedY <= 1f;
         }
 
+        private bool IsOutsideCatchAreaWithMargin(Vector2 groundPosition)
+        {
+            Vector2 offset = groundPosition - GetCatchAreaCenter();
+            float exitMargin = Mathf.Max(0f, _catchAreaExitMargin);
+            float horizontalRadius = Mathf.Max(0.1f, _catchHorizontalRadius) + exitMargin;
+            float verticalRadius = Mathf.Max(0.1f, _catchVerticalRadius) + exitMargin;
+            float normalizedX = offset.x / horizontalRadius;
+            float normalizedY = offset.y / verticalRadius;
+            return normalizedX * normalizedX + normalizedY * normalizedY > 1f;
+        }
+
         private bool TryCompleteCatch(CarryableObject item, Transform point)
         {
-            if (item == null || point == null || !IsInsideCatchArea(item.CatchVisualPosition)
+            if (item == null || point == null || !_catchAreaExitedItems.Contains(item)
+                || !IsInsideCatchArea(item.CatchGroundPosition)
                 || !item.Agent.TryCatch(point, _catchTweenDuration)) return false;
+            _catchAreaExitedItems.Remove(item);
             _heldObjects.Add(item);
             CaptureCarrySorting(item);
             RefreshCarrySorting();

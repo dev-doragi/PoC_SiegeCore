@@ -8,8 +8,6 @@ namespace SiegeCore.Rat
     {
         [SerializeField] private RatMergeResolver _mergeResolver;
         [Header("Collision Fusion")]
-        [SerializeField, Min(0f), Tooltip("두 Rat이 충돌 합성될 수 있는 최대 가상 높이 차이입니다.")]
-        private float _fusionHeightTolerance = 0.45f;
         private RatAgent _rat;
         private RatFlightMotion _motion;
         private RatCollisionFusion _fusionPartner;
@@ -21,7 +19,7 @@ namespace SiegeCore.Rat
             _motion = GetComponent<RatFlightMotion>();
         }
 
-        internal void ResetFusion()
+        public void ResetFusion()
         {
             IsLocked = false;
             if (_fusionPartner != null)
@@ -34,7 +32,7 @@ namespace SiegeCore.Rat
 
         private void OnDisable() { ResetFusion(); }
 
-        internal bool TryResolveOverlap()
+        public bool TryResolveOverlap()
         {
             if (!_motion.IsAirborne
                 || _motion.SwingId == 0
@@ -85,6 +83,16 @@ namespace SiegeCore.Rat
 
         private bool TryBeginCollisionFusion(RatCollisionFusion other)
         {
+            if (other == null
+                || _motion == null
+                || other._motion == null
+                || _motion.Collider == null
+                || other._motion.Collider == null
+                || !_motion.Collider.Distance(other._motion.Collider).isOverlapped)
+            {
+                return false;
+            }
+
             string rejectionReason = GetCollisionFusionRejectionReason(other);
             if (rejectionReason != null)
             {
@@ -132,13 +140,6 @@ namespace SiegeCore.Rat
             if (!_rat.Factory.Battlefield.IsSafe(midpoint))
             {
                 return "Safe Zone 밖";
-            }
-
-            float heightDifference = Mathf.Abs(_motion.Height - other._motion.Height);
-            if (heightDifference > _fusionHeightTolerance)
-            {
-                return "높이 차이 " + heightDifference.ToString("F2")
-                    + " > " + _fusionHeightTolerance.ToString("F2");
             }
 
             if (_mergeResolver == null

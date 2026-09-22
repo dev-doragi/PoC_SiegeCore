@@ -30,6 +30,7 @@ namespace SiegeCore.Rat
         Carried,
         Airborne,
         Groggy,
+        CannonLoading,
         Loaded,
         CannonFlight,
         GroundCombat,

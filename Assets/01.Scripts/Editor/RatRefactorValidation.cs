@@ -159,8 +159,19 @@ public static class RatRefactorValidation
         PoolDefinition pool = lookup[definitions[1]];
         RatAgent first = factory.Spawn(definitions[0], VehicleSide.Ally, safe);
         RatAgent second = factory.Spawn(definitions[0], VehicleSide.Ally, safe);
+        RatAgent distant = factory.Spawn(
+            definitions[0],
+            VehicleSide.Ally,
+            safe + Vector3.right * 10f);
         try
         {
+            Check(!(bool)Call(
+                    first.GetComponent<RatCollisionFusion>(),
+                    "TryBeginCollisionFusion",
+                    distant.GetComponent<RatCollisionFusion>()),
+                "Non-overlapping rats do not fuse");
+            distant.Release();
+
             lookup.Remove(definitions[1]);
             Call(first.GetComponent<RatCollisionFusion>(), "TryBeginCollisionFusion", second.GetComponent<RatCollisionFusion>());
             Check(RatAgent.Active.Count == 2 && first.isActiveAndEnabled && second.isActiveAndEnabled

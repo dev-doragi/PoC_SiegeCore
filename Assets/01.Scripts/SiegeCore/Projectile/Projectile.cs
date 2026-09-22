@@ -73,7 +73,7 @@ namespace SiegeCore.Projectile
             ResetForPool();
         }
 
-        internal void ResetForPool()
+        public void ResetForPool()
         {
             // Pool activation is not a new cannon launch.
             _isActive = false;

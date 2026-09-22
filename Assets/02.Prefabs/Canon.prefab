@@ -312,6 +312,9 @@ MonoBehaviour:
   _sourceSlot: {fileID: 0}
   _groundTilemap: {fileID: 0}
   _maxLoadCount: 3
+  _ratLoadingDuration: 0.2
+  _intruderDamageRatioPerSecond: 0.05
+  _intruderDamageInterval: 1
   _trajectoryType: 1
   _fireInterval: 1.5
   _projectileFlightDuration: 6

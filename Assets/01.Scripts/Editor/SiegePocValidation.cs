@@ -230,6 +230,31 @@ public static class SiegePocValidation
             break;
         }
         Check(found, "Scene has safe fusion floor");
+        Check(factory.Battlefield.TryFindSplitLandingPosition(
+            safe,
+            VehicleSide.Ally,
+            true,
+            false,
+            out Vector3 battlefieldSplit),
+            "General split finds battlefield floor");
+        Check(factory.Battlefield.BattlefieldGround.HasTile(
+                factory.Battlefield.BattlefieldGround.WorldToCell(battlefieldSplit))
+            && !factory.Battlefield.IsInsideAnyBase(battlefieldSplit),
+            "General split excludes both bases");
+
+        GroundGate enemyGate = factory.Battlefield.EnemyGate;
+        Check(enemyGate != null
+            && factory.Battlefield.TryFindSplitLandingPosition(
+                enemyGate.BasePosition,
+                VehicleSide.Ally,
+                true,
+                true,
+                out Vector3 infiltratedSplit)
+            && enemyGate.ContainsBasePosition(infiltratedSplit),
+            "Infiltrated split finds target base floor");
+        Check((enemyGate.ArenaPosition - enemyGate.BasePosition).sqrMagnitude > 0.0001f,
+            "Ground assignment exposes an external arena entry point");
+
         RatAgent first = factory.Spawn(BasicDefinition, VehicleSide.Ally, safe);
         RatAgent second = factory.Spawn(BasicDefinition, VehicleSide.Ally, safe);
         first.LaunchFromBat(Vector2.right, 12, 0, 0, 3, 123, true, null);
@@ -246,13 +271,18 @@ public static class SiegePocValidation
             && Mathf.Approximately(bbb.GetComponent<Rigidbody2D>().linearVelocity.x, 12), "BBB preserves launch speed");
         ClearRats();
         RatAgent deployed = factory.SpawnIdle(BasicDefinition, VehicleSide.Ally, safe);
-        Check(factory.Battlefield.AllyGate.TryEnterArena(deployed)
+        Check(factory.Battlefield.AllyGate.TryMoveBaseToArena(deployed)
             && deployed.State == RatState.GroundCombat, "Exit deploys same Rat to Arena");
         ClearRats();
         RatAgent captured = factory.SpawnIdle(BasicDefinition, VehicleSide.Enemy, safe);
         SiegeCore.Cannon.Cannon cannon = UnityEngine.Object.FindObjectsByType<SiegeCore.Cannon.Cannon>(FindObjectsSortMode.None)
             .First(item => item.IsInstalledFor(VehicleSide.Ally));
-        Check(captured.TryLoadIntoCannon(cannon) && captured.State == RatState.Loaded, "Enemy Rat can load into ally Cannon");
+        Check(captured.TryLoadIntoCannon(cannon)
+            && captured.State == RatState.CannonLoading,
+            "Enemy Rat begins loading into ally Cannon");
+        Call(captured.Motion, "CompleteCannonLoading");
+        Check(captured.State == RatState.Loaded && captured.Motion.IsLoaded,
+            "Enemy Rat reaches ally Cannon storage");
         Check(captured.Faction == VehicleSide.Enemy, "Loading preserves original faction");
         captured.LaunchFromCannon(safe, safe + Vector3.right * 10, VehicleSide.Ally,
             cannon.SourceSlot, CannonTrajectoryType.Straight, 3, 0);

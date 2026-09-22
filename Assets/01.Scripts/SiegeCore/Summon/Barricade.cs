@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using SiegeCore.Cannon;
 using SiegeCore.Combat;
 using SiegeCore.Ground;
@@ -7,19 +8,35 @@ using UnityEngine;
 namespace SiegeCore.Summon
 {
     [RequireComponent(typeof(Rigidbody2D), typeof(Collider2D))]
-    public sealed class Barricade : MonoBehaviour, IDamageable
+    public sealed class Barricade : MonoBehaviour, IGroundCombatTarget
     {
+        public static readonly HashSet<Barricade> Active =
+            new HashSet<Barricade>();
+
         [SerializeField, Min(1f)] private float _defaultHealth = 20f;
+        [SerializeField] private int _attackPriority = 20;
 
         public VehicleSide Owner { get; private set; }
         public VehicleSide Side { get { return Owner; } }
         public float CurrentHealth { get; private set; }
         public float MaxHealth { get; private set; }
         public bool IsDead { get { return CurrentHealth <= 0f; } }
+        public Transform TargetTransform { get { return transform; } }
+        public int AttackPriority { get { return _attackPriority; } }
 
         private SpriteRenderer _visual;
         private Rigidbody2D _rigidbody;
         private GroundDropMotion _dropMotion;
+
+        private void OnEnable()
+        {
+            Active.Add(this);
+        }
+
+        private void OnDisable()
+        {
+            Active.Remove(this);
+        }
 
         private void Awake()
         {

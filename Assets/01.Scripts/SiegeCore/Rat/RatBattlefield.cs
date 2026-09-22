@@ -40,10 +40,24 @@ namespace SiegeCore.Rat
 
         public bool IsWalkable(Vector3Int cell, VehicleSide faction)
         {
-            if (!_ground.HasTile(cell))
+            return IsWalkable(_ground, cell, faction);
+        }
+
+        public bool IsWalkable(
+            Tilemap ground,
+            Vector3Int cell,
+            VehicleSide faction)
+        {
+            if (ground == null || !ground.HasTile(cell))
             {
                 return false;
             }
+
+            if (ground != _ground)
+            {
+                return true;
+            }
+
             foreach (RatStructure structure in RatStructure.Active)
             {
                 if (structure.IsEntrance && !structure.IsDestroyed && structure.Faction != faction
@@ -58,8 +72,30 @@ namespace SiegeCore.Rat
         // Four-neighbour navigation keeps agents on the same floor as the player.
         public bool TryPath(Vector3 from, Vector3 target, VehicleSide faction, List<Vector3> path, float stopRange = 0.1f)
         {
+            return TryPath(
+                _ground,
+                from,
+                target,
+                faction,
+                path,
+                stopRange);
+        }
+
+        public bool TryPath(
+            Tilemap ground,
+            Vector3 from,
+            Vector3 target,
+            VehicleSide faction,
+            List<Vector3> path,
+            float stopRange = 0.1f)
+        {
             path.Clear();
-            Vector3Int start = _ground.WorldToCell(from);
+            if (ground == null)
+            {
+                return false;
+            }
+
+            Vector3Int start = ground.WorldToCell(from);
             Queue<Vector3Int> open = new Queue<Vector3Int>();
             Dictionary<Vector3Int, Vector3Int> parents = new Dictionary<Vector3Int, Vector3Int>();
             open.Enqueue(start);
@@ -67,13 +103,14 @@ namespace SiegeCore.Rat
             while (open.Count > 0 && parents.Count < 4096)
             {
                 Vector3Int cell = open.Dequeue();
-                Vector3 center = _ground.GetCellCenterWorld(cell);
+                Vector3 center = ground.GetCellCenterWorld(cell);
                 if (Vector2.Distance(center, target) <= Mathf.Max(0.1f, stopRange)
-                    || (cell == _ground.WorldToCell(target) && IsWalkable(cell, faction)))
+                    || (cell == ground.WorldToCell(target)
+                        && IsWalkable(ground, cell, faction)))
                 {
                     while (cell != start)
                     {
-                        path.Add(_ground.GetCellCenterWorld(cell));
+                        path.Add(ground.GetCellCenterWorld(cell));
                         cell = parents[cell];
                     }
                     path.Reverse();
@@ -88,7 +125,8 @@ namespace SiegeCore.Rat
                 foreach (Vector3Int direction in Directions)
                 {
                     Vector3Int next = cell + direction;
-                    if (parents.ContainsKey(next) || !IsWalkable(next, faction))
+                    if (parents.ContainsKey(next)
+                        || !IsWalkable(ground, next, faction))
                     {
                         continue;
                     }
@@ -163,6 +201,147 @@ namespace SiegeCore.Rat
             return found
                 ? best
                 : NearestFloor(position, faction);
+        }
+
+        public bool IsInsideAnyBase(Vector3 position)
+        {
+            return (_allyGate != null && _allyGate.ContainsBasePosition(position))
+                || (_enemyGate != null && _enemyGate.ContainsBasePosition(position));
+        }
+
+        public bool TryFindSplitLandingPosition(
+            Vector3 origin,
+            VehicleSide faction,
+            bool onGround,
+            bool infiltrated,
+            out Vector3 landingPosition)
+        {
+            landingPosition = origin;
+
+            if (infiltrated)
+            {
+                GroundGate targetGate = GetEnemyGate(faction);
+                if (targetGate != null
+                    && TryFindSplitPosition(
+                        _ground,
+                        origin,
+                        faction,
+                        targetGate,
+                        false,
+                        !onGround,
+                        out landingPosition))
+                {
+                    return true;
+                }
+            }
+
+            if (TryFindSplitPosition(
+                _battlefieldGround,
+                origin,
+                faction,
+                null,
+                true,
+                !onGround,
+                out landingPosition))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryFindSplitPosition(
+            Tilemap tilemap,
+            Vector3 origin,
+            VehicleSide faction,
+            GroundGate requiredGate,
+            bool excludeBases,
+            bool preferBelow,
+            out Vector3 landingPosition)
+        {
+            landingPosition = origin;
+            if (tilemap == null)
+            {
+                return false;
+            }
+
+            if (preferBelow
+                && TryFindNearestSplitPosition(
+                    tilemap,
+                    origin,
+                    faction,
+                    requiredGate,
+                    excludeBases,
+                    true,
+                    out landingPosition))
+            {
+                return true;
+            }
+
+            return TryFindNearestSplitPosition(
+                tilemap,
+                origin,
+                faction,
+                requiredGate,
+                excludeBases,
+                false,
+                out landingPosition);
+        }
+
+        private bool TryFindNearestSplitPosition(
+            Tilemap tilemap,
+            Vector3 origin,
+            VehicleSide faction,
+            GroundGate requiredGate,
+            bool excludeBases,
+            bool belowOnly,
+            out Vector3 landingPosition)
+        {
+            landingPosition = origin;
+            float bestDistance = float.PositiveInfinity;
+            bool found = false;
+
+            foreach (Vector3Int cell in tilemap.cellBounds.allPositionsWithin)
+            {
+                if (!tilemap.HasTile(cell))
+                {
+                    continue;
+                }
+
+                Vector3 candidate = tilemap.GetCellCenterWorld(cell);
+                if (requiredGate != null
+                    && !requiredGate.ContainsBasePosition(candidate))
+                {
+                    continue;
+                }
+
+                if (excludeBases && IsInsideAnyBase(candidate))
+                {
+                    continue;
+                }
+
+                if (belowOnly && candidate.y > origin.y + 0.01f)
+                {
+                    continue;
+                }
+
+                if (tilemap == _ground && !IsWalkable(cell, faction))
+                {
+                    continue;
+                }
+
+                float distance = (candidate - origin).sqrMagnitude;
+                if (distance >= bestDistance)
+                {
+                    continue;
+                }
+
+                bestDistance = distance;
+                landingPosition = candidate;
+                found = true;
+            }
+
+            return found;
         }
 
         public Vector3 GetBattlefieldCenterAtX(float worldX)

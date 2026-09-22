@@ -18,10 +18,17 @@ namespace SiegeCore.Cannon
 
         [Header("Loading")]
         [SerializeField, Min(1)] private int _maxLoadCount = 3;
+        [SerializeField, Min(0.01f)] private float _ratLoadingDuration = 0.2f;
+
+        [Header("Intruder Damage")]
+        [SerializeField, Range(0f, 1f)]
+        private float _intruderDamageRatioPerSecond = 0.05f;
+        [SerializeField, Min(0.05f)]
+        private float _intruderDamageInterval = 1f;
 
         [Header("Fire")]
         [SerializeField] private CannonTrajectoryType _trajectoryType = CannonTrajectoryType.Straight;
-        [SerializeField, Min(0.01f)] private float _fireInterval = 0.4f;
+        [SerializeField, Min(0.01f)] private float _minimumFireInterval = 0.2f;
         [SerializeField, Min(0.01f)] private float _projectileFlightDuration = 3f;
         [SerializeField, Min(0f)] private float _projectileArcHeight = 2f;
 
@@ -38,6 +45,9 @@ namespace SiegeCore.Cannon
 
         private CannonMagazine _magazine;
         private Coroutine _fireRoutine;
+        private bool _hasFired;
+        private float _lastFireTime;
+        private float _nextIntruderDamageTime;
         private Tween _carryTween;
         private Tween _scaleTween;
         private Transform _worldParent;
@@ -138,6 +148,11 @@ namespace SiegeCore.Cannon
 
         private void OnDisable()
         {
+            if (_magazine != null)
+            {
+                _magazine.CancelLoading();
+            }
+
             if (_sourceSlot != null)
             {
                 _sourceSlot.UnregisterCannon(this);
@@ -177,6 +192,34 @@ namespace SiegeCore.Cannon
             }
         }
 
+        private void Update()
+        {
+            if (State != CannonState.Installed
+                || _sourceSlot == null
+                || _magazine == null
+                || Time.timeScale <= 0f
+                || _intruderDamageRatioPerSecond <= 0f
+                || _intruderDamageInterval <= 0f
+                || Time.time < _nextIntruderDamageTime)
+            {
+                return;
+            }
+
+            bool hasIntruder = _magazine.ApplyIntruderDamage(
+                _sourceSlot.VehicleSide,
+                _intruderDamageRatioPerSecond,
+                _intruderDamageInterval);
+            if (hasIntruder)
+            {
+                _nextIntruderDamageTime =
+                    Time.time + _intruderDamageInterval;
+            }
+            else
+            {
+                _nextIntruderDamageTime = Time.time;
+            }
+        }
+
         private void LateUpdate()
         {
             if (_visual == null) return;
@@ -193,7 +236,7 @@ namespace SiegeCore.Cannon
             return TryLoadRat(item != null ? item.Agent : null, false, out reason);
         }
 
-        internal bool TryLoadIdle(RatAgent rat)
+        public bool TryLoadIdle(RatAgent rat)
         {
             return TryLoadRat(rat, true, out string reason);
         }
@@ -204,11 +247,26 @@ namespace SiegeCore.Cannon
             if (!isActiveAndEnabled) reason = "Cannon is disabled";
             else if (_storagePoint == null) reason = "StoragePoint is missing";
             else if (IsFull) reason = "Queue is full";
-            else if (rat == null || !rat.TryEnterCannon(_storagePoint, fromIdle)) reason = "Ammo is not eligible for loading";
+            else if (rat == null) reason = "Ammo is not eligible for loading";
             if (reason != null) return false;
 
-            // Capacity is checked before the Rat commits its loaded state.
-            _magazine.Enqueue(rat);
+            // Reserve the slot before the Rat commits its loading state.
+            if (!_magazine.Enqueue(rat))
+            {
+                reason = "Queue reservation failed";
+                return false;
+            }
+
+            if (!rat.TryEnterCannon(
+                    _storagePoint,
+                    fromIdle,
+                    _ratLoadingDuration))
+            {
+                _magazine.Remove(rat);
+                reason = "Ammo is not eligible for loading";
+                return false;
+            }
+
             StartFiringIfNeeded();
             return true;
         }
@@ -223,24 +281,56 @@ namespace SiegeCore.Cannon
         {
             while (State == CannonState.Installed && LoadedCount > 0)
             {
-                // Wait before dequeueing: the pending shot still occupies a storage slot.
-                yield return new WaitForSeconds(Mathf.Max(0.01f, _fireInterval));
-                if (State != CannonState.Installed || LoadedCount == 0) break;
+                if (!_magazine.TryPeekReady(
+                    out RatAgent rat,
+                    out float readyTime))
+                {
+                    yield return null;
+                    continue;
+                }
+
+                float fireTime = readyTime;
+                if (_hasFired)
+                {
+                    fireTime = Mathf.Max(
+                        fireTime,
+                        _lastFireTime + Mathf.Max(0.01f, _minimumFireInterval));
+                }
+
+                float waitTime = fireTime - Time.time;
+                if (waitTime > 0f)
+                {
+                    yield return new WaitForSeconds(waitTime);
+                }
+
+                if (State != CannonState.Installed
+                    || LoadedCount == 0)
+                {
+                    break;
+                }
+
                 if (_muzzle == null || _sourceSlot == null || _sourceSlot.TargetSlot == null)
                 {
                     Debug.LogError("[Cannon] Cannot fire without a muzzle, source slot and target slot.", this);
+                    yield return null;
                     continue;
                 }
                 if (!TryGetShotTarget(out Vector3 targetPosition))
                 {
                     Debug.LogError("[Cannon] Target cannon or Target Slot must provide a fire position.", this);
+                    yield return null;
                     continue;
                 }
-                RatAgent rat = _magazine.Peek();
                 if (rat.LaunchFromCannon(_muzzle.position, targetPosition, _sourceSlot.VehicleSide,
                     _sourceSlot, _trajectoryType, _projectileFlightDuration, _projectileArcHeight))
                 {
                     _magazine.Remove(rat);
+                    _lastFireTime = Time.time;
+                    _hasFired = true;
+                }
+                else
+                {
+                    yield return null;
                 }
             }
             _fireRoutine = null;
@@ -342,6 +432,7 @@ namespace SiegeCore.Cannon
             _sourceSlot = slot;
             _sourceSlot.RegisterCannon(this);
             State = CannonState.Installed;
+            _nextIntruderDamageTime = Time.time;
             _rigidbody.bodyType = RigidbodyType2D.Kinematic;
             _rigidbody.linearVelocity = Vector2.zero;
             _collider.isTrigger = true;

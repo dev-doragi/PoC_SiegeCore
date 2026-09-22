@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace SiegeCore.Rat
 {
-    public sealed class RatStructure : MonoBehaviour, IDamageable
+    public sealed class RatStructure : MonoBehaviour, IDamageable, IGroundCombatTarget
     {
         public static readonly HashSet<RatStructure> Active = new HashSet<RatStructure>();
         [SerializeField] private VehicleSide _faction;
@@ -21,6 +21,8 @@ namespace SiegeCore.Rat
         public float MaxHealth { get { return _maxHealth; } }
         public bool IsDestroyed { get { return Health <= 0f; } }
         public bool IsDead { get { return IsDestroyed; } }
+        public Transform TargetTransform { get { return transform; } }
+        public int AttackPriority { get { return 0; } }
         public event Action<RatStructure> Destroyed;
 
         private void Awake()

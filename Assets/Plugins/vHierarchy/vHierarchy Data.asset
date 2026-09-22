@@ -22,6 +22,8 @@ MonoBehaviour:
         - globalObjectIdString: GlobalObjectId_V1-2-1bcb6a3a6c5caa74f802dafb8b67bbcd-944346117-0
         - globalObjectIdString: GlobalObjectId_V1-2-1bcb6a3a6c5caa74f802dafb8b67bbcd-844662683-0
         - globalObjectIdString: GlobalObjectId_V1-2-1bcb6a3a6c5caa74f802dafb8b67bbcd-2059067902-0
+        - globalObjectIdString: GlobalObjectId_V1-2-1bcb6a3a6c5caa74f802dafb8b67bbcd-1807365966-0
+        - globalObjectIdString: GlobalObjectId_V1-2-1bcb6a3a6c5caa74f802dafb8b67bbcd-1143547436-0
         values:
         - colorIndex: 0
           iconNameOrGuid: Settings Icon
@@ -37,6 +39,14 @@ MonoBehaviour:
           isColorRecursive: 0
         - colorIndex: 0
           iconNameOrGuid: Settings Icon
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 0
+          iconNameOrGuid: PreMatCube
+          isIconRecursive: 0
+          isColorRecursive: 0
+        - colorIndex: 0
+          iconNameOrGuid: PreMatCube
           isIconRecursive: 0
           isColorRecursive: 0
   bookmarks: []

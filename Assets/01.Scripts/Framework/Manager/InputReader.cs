@@ -240,20 +240,24 @@ public class InputReader : Singleton<InputReader>
         EventBus.Instance.Publish(new BattlefieldViewInputEvent());
     }
 
-    public void SetPlayerActionsEnabled(bool enabled)
+    public void SetCombatActionsEnabled(bool enabled)
     {
-        if (_playerMap == null)
+        if (_primary == null || _secondary == null)
         {
             return;
         }
 
         if (enabled)
         {
-            _playerMap.Enable();
+            _primary.Enable();
+            _secondary.Enable();
             return;
         }
 
-        _playerMap.Disable();
-        EventBus.Instance.Publish(new MoveInputEvent { Value = Vector2.zero });
+        _primary.Disable();
+        _secondary.Disable();
+
+        EventBus.Instance.Publish(new PrimaryActionInputEvent { IsPressed = false });
+        EventBus.Instance.Publish(new SecondaryActionInputEvent { IsPressed = false });
     }
 }

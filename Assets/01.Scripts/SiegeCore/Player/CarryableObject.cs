@@ -21,11 +21,13 @@ namespace SiegeCore.Player
         public bool IsCarried { get { return _motion.IsCarried; } }
         public bool IsAirborne { get { return _motion.IsAirborne; } }
         public bool IsLoaded { get { return _motion.IsLoaded; } }
+        public bool IsCannonLoading { get { return _motion.IsCannonLoading; } }
         public bool IsCannonFlight { get { return _motion.IsCannonFlight; } }
         public bool IsFusionLocked { get { return _motion.IsFusionLocked; } }
         public float Height { get { return _motion.Height; } }
         public float HeightGravity { get { return _motion.HeightGravity; } }
         public float FallDistanceFromPeak { get { return _motion.FallDistanceFromPeak; } }
+        public Vector2 CatchGroundPosition { get { return _motion.CatchGroundPosition; } }
         public Vector2 CatchVisualPosition { get { return _motion.CatchVisualPosition; } }
         public Transform CarryVisual { get { return _presentation.Visual; } }
         public Vector3 CarryVisualRestScale { get { return _presentation.RestScale; } }
@@ -48,12 +50,20 @@ namespace SiegeCore.Player
             _agent.DropFromCarry(worldPosition);
         }
 
-        internal void RememberWorldParent() { _worldParent = transform.parent; }
+        public void RememberWorldParent()
+        {
+            _worldParent = transform.parent;
+        }
 
-        internal bool Attach(Transform holdPoint, bool catchInFlight, float duration = 0f)
+        public bool Attach(Transform holdPoint, bool catchInFlight, float duration = 0f)
         {
             if (!isActiveAndEnabled || holdPoint == null || holdPoint.IsChildOf(transform)) return false;
-            if (catchInFlight ? !_motion.IsAirborne : (_motion.IsCarried || _motion.IsAirborne || _motion.IsLoaded)) return false;
+            if (catchInFlight
+                ? !_motion.IsAirborne
+                : (_motion.IsCarried
+                    || _motion.IsAirborne
+                    || _motion.IsCannonLoading
+                    || _motion.IsLoaded)) return false;
             Vector3 displayedPosition = _presentation.Visual.position;
             RememberWorldParent();
             _motion.PrepareCarry();
@@ -74,13 +84,13 @@ namespace SiegeCore.Player
             return true;
         }
 
-        internal void Detach()
+        public void Detach()
         {
             CompleteCatchTween();
             transform.SetParent(_worldParent, true);
         }
 
-        internal void DropToGround(Vector3 worldPosition)
+        public void DropToGround(Vector3 worldPosition)
         {
             if (!IsCarried) return;
             Detach();
@@ -89,7 +99,7 @@ namespace SiegeCore.Player
             _motion.CompleteSettle(false);
         }
 
-        internal void CompleteCatchTween()
+        public void CompleteCatchTween()
         {
             if (_catchTween == null) return;
             _catchTween.Kill();
@@ -97,13 +107,13 @@ namespace SiegeCore.Player
             if (IsCarried) transform.localPosition = Vector3.zero;
         }
 
-        internal void ResetCarry()
+        public void ResetCarry()
         {
             CompleteCatchTween();
             _worldParent = null;
         }
 
-        internal void NotifyGroundSorting()
+        public void NotifyGroundSorting()
         {
             GroundSortingRequested?.Invoke(this);
         }

@@ -18,12 +18,13 @@ namespace SiegeCore.Rat
         private SpriteRenderer _visualRenderer;
         private SpriteRenderer _shadowRenderer;
         private Transform _shadowTransform;
+        private bool _cannonStorageHidden;
 
         private RatPresentationData _sprites;
         private RatPresentationConfig _config;
         private bool _presentationReady;
 
-        internal void CreateShadow()
+        public void CreateShadow()
         {
             _visualRenderer = _visual.GetComponent<SpriteRenderer>();
 
@@ -58,7 +59,7 @@ namespace SiegeCore.Rat
             _shadowRenderer.color = shadowColor;
         }
 
-        internal void UpdateHeightPresentation()
+        public void UpdateHeightPresentation()
         {
             if (_visual == null)
             {
@@ -100,7 +101,9 @@ namespace SiegeCore.Rat
                 1f);
 
             _shadowRenderer.enabled =
-                !_motion.IsCarried && !_motion.IsLoaded;
+                !_cannonStorageHidden
+                && !_motion.IsCarried
+                && !_motion.IsLoaded;
         }
 
         public void RefreshShadowSprite()
@@ -112,7 +115,7 @@ namespace SiegeCore.Rat
             }
         }
 
-        internal void ResetVisualHeight()
+        public void ResetVisualHeight()
         {
             if (_visual != null)
             {
@@ -121,7 +124,7 @@ namespace SiegeCore.Rat
             }
         }
 
-        internal void ApplySquash(Vector2 impactNormal)
+        public void ApplySquash(Vector2 impactNormal)
         {
             if (_visual == null)
             {
@@ -143,7 +146,7 @@ namespace SiegeCore.Rat
             _visual.localScale = scale;
         }
 
-        internal void ResetVisualScale()
+        public void ResetVisualScale()
         {
             if (_visual != null)
             {
@@ -151,11 +154,11 @@ namespace SiegeCore.Rat
             }
         }
 
-        internal Transform Visual { get { return _visual; } }
-        internal Vector3 RestPosition { get { return _visualRestPosition; } }
-        internal Vector3 RestScale { get { return _visualRestScale; } }
+        public Transform Visual { get { return _visual; } }
+        public Vector3 RestPosition { get { return _visualRestPosition; } }
+        public Vector3 RestScale { get { return _visualRestScale; } }
 
-        internal bool InitializeMotionVisual()
+        public bool InitializeMotionVisual()
         {
             if (_motionVisualReady) return true;
             if (!_presentationReady && !TryLoadPresentation()) return false;
@@ -202,6 +205,26 @@ namespace SiegeCore.Rat
                     && agent.Definition != null
                     && agent.Definition.Presentation.HasRequiredSprites
                     && agent.Definition.PresentationConfig != null;
+            }
+        }
+
+        public void SetCannonStorageVisibility(bool visible)
+        {
+            _cannonStorageHidden = !visible;
+
+            if (_renderer != null)
+            {
+                _renderer.enabled = visible;
+            }
+
+            if (_visualRenderer != null)
+            {
+                _visualRenderer.enabled = visible;
+            }
+
+            if (_shadowRenderer != null)
+            {
+                _shadowRenderer.enabled = visible;
             }
         }
 
@@ -351,6 +374,7 @@ namespace SiegeCore.Rat
 
                 case RatState.Carried:
                 case RatState.Airborne:
+                case RatState.CannonLoading:
                 case RatState.Loaded:
                 case RatState.CannonFlight:
                     _renderer.sprite = _sprites.ProjectileSprite;
@@ -530,6 +554,8 @@ namespace SiegeCore.Rat
 
         private void ResetVisual()
         {
+            _cannonStorageHidden = false;
+            SetCannonStorageVisibility(true);
             Color color = _renderer.color;
             color.a = 1f;
 

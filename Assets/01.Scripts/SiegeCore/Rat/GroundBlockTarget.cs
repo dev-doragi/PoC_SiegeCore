@@ -49,7 +49,7 @@ namespace SiegeCore.Rat
             Blocker = null;
         }
 
-        internal bool AssignBlocker(GroundBlocker blocker)
+        public bool AssignBlocker(GroundBlocker blocker)
         {
             if (blocker == null)
             {
@@ -65,7 +65,7 @@ namespace SiegeCore.Rat
             return true;
         }
 
-        internal void ClearBlocker(GroundBlocker blocker)
+        public void ClearBlocker(GroundBlocker blocker)
         {
             if (Blocker == blocker)
             {

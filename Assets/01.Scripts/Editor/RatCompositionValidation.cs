@@ -109,7 +109,13 @@ public static class RatCompositionValidation
             probe = factory.Spawn(definition, VehicleSide.Ally, position);
             Check(probe != null && probe.GroundBehaviour == null && probe.GetComponent<RatCollisionFusion>() == null,
                 "Factory accepts optional ground behaviour and fusion");
-            Check(probe.TryLoadIntoCannon(cannon), "Composed Rat loads without cannon changes");
+            Check(probe.TryLoadIntoCannon(cannon)
+                && probe.State == RatState.CannonLoading
+                && !probe.Motion.IsLoaded,
+                "Composed Rat begins cannon loading without cannon changes");
+            Call(probe.Motion, "CompleteCannonLoading");
+            Check(probe.State == RatState.Loaded && probe.Motion.IsLoaded,
+                "Composed Rat completes cannon loading");
             Check(probe.LaunchFromCannon(position, position + Vector3.right * 5f, VehicleSide.Ally,
                 cannon.SourceSlot, CannonTrajectoryType.Straight, 3f, 0f), "Composed Rat fires existing projectile ability");
             probe.Release();
@@ -125,6 +131,10 @@ public static class RatCompositionValidation
     }
 
     private static object Get(object target, string name) { return target.GetType().GetField(name, Fields).GetValue(target); }
+    private static object Call(object target, string method, params object[] args)
+    {
+        return target.GetType().GetMethod(method, Fields).Invoke(target, args);
+    }
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);

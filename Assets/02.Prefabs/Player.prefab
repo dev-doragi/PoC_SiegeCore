@@ -711,6 +711,7 @@ MonoBehaviour:
   _catchHorizontalRadius: 0.85
   _catchVerticalRadius: 0.55
   _catchAreaOffset: {x: 0, y: 0}
+  _catchAreaExitMargin: 0.1
   _catchTweenDuration: 0.12
   _catchSquashStrength: 0.08
 --- !u!114 &770170442012943867
