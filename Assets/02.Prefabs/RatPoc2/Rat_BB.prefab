@@ -8,38 +8,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 8591575405359856006, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Name
-      value: Rat_BB
-      objectReference: {fileID: 0}
-    - target: {fileID: 3342614870958549493, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Offset.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 3342614870958549493, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Radius
-      value: 0.75
-      objectReference: {fileID: 0}
-    - target: {fileID: 2989915881095887205, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: _shadowScale.y
-      value: 0.45
-      objectReference: {fileID: 0}
-    - target: {fileID: 2668117264886249552, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: _definition
-      value:
-      objectReference: {fileID: 11400000, guid: d4b0e66153c8e3640a957f8d136ee8cd, type: 2}
-    - target: {fileID: 2723632910628179223, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: _groundSprite
-      value:
-      objectReference: {fileID: 21300000, guid: 248568ff171f3a64db48c42f78bed68c, type: 3}
-    - target: {fileID: 2723632910628179223, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: _projectileSprite
-      value:
-      objectReference: {fileID: 21300000, guid: 248568ff171f3a64db48c42f78bed68c, type: 3}
-    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Sprite
-      value:
-      objectReference: {fileID: 21300000, guid: 248568ff171f3a64db48c42f78bed68c, type: 3}
     - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
       propertyPath: m_Size.x
       value: 2.6666667
@@ -47,6 +15,26 @@ PrefabInstance:
     - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
       propertyPath: m_Size.y
       value: 2.6666667
+      objectReference: {fileID: 0}
+    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Sprite
+      value:
+      objectReference: {fileID: 21300000, guid: 248568ff171f3a64db48c42f78bed68c, type: 3}
+    - target: {fileID: 2668117264886249552, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: _definition
+      value: 
+      objectReference: {fileID: 11400000, guid: d4b0e66153c8e3640a957f8d136ee8cd, type: 2}
+    - target: {fileID: 3342614870958549493, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Radius
+      value: 0.75
+      objectReference: {fileID: 0}
+    - target: {fileID: 3342614870958549493, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Offset.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8591575405359856006, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Name
+      value: Rat_BB
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

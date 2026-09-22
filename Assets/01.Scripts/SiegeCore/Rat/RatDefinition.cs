@@ -70,6 +70,24 @@ namespace SiegeCore.Rat
         public RatWeightRank Weight;
     }
 
+    [Serializable]
+    public struct RatPresentationData
+    {
+        public Sprite GroundSprite;
+        public Sprite ProjectileSprite;
+        public Sprite DeadSprite;
+
+        public bool HasRequiredSprites
+        {
+            get
+            {
+                return GroundSprite != null
+                    && ProjectileSprite != null
+                    && DeadSprite != null;
+            }
+        }
+    }
+
     [CreateAssetMenu(menuName = "SiegeCore/Rat Definition")]
     public sealed class RatDefinition : ScriptableObject
     {
@@ -77,7 +95,8 @@ namespace SiegeCore.Rat
         public RatRank Rank = RatRank.Rank1;
 
         [Header("Presentation")]
-        public Sprite DeadSprite;
+        public RatPresentationData Presentation;
+        public RatPresentationConfig PresentationConfig;
 
         [Header("Ground Combat")]
         public GroundStats Ground = new GroundStats

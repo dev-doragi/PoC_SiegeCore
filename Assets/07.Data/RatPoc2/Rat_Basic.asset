@@ -14,7 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatDefinition
   Type: 0
   Rank: 1
-  DeadSprite: {fileID: 21300000, guid: 7f1237e1324f2f347a231683c63d3404, type: 3}
+  Presentation:
+    GroundSprite: {fileID: 21300000, guid: 084044ac3dfcb804aaf7e7ef8bbe42d0, type: 3}
+    ProjectileSprite: {fileID: 21300000, guid: d6470002e63e1504ab0b4874a9cfd0ee, type: 3}
+    DeadSprite: {fileID: 21300000, guid: 7f1237e1324f2f347a231683c63d3404, type: 3}
+  PresentationConfig: {fileID: 11400000, guid: 30f9ce0bc86c4d258801a2a0282f3097, type: 2}
   Ground:
     Health: 10
     AttackDamage: 3

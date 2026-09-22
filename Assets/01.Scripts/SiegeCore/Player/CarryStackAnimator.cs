@@ -1,3 +1,4 @@
+using SiegeCore.Rat;
 using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
@@ -33,7 +34,8 @@ namespace SiegeCore.Player
             public Transform Visual;
             public Vector3 RestScale;
             public Tween Tween;
-            public System.Action StateChanged;
+            public System.Action<RatAgent, RatState, RatState> StateChanged;
+            public System.Action<RatAgent> Released;
         }
         private readonly List<Landing> _landings = new List<Landing>();
 
@@ -208,8 +210,10 @@ namespace SiegeCore.Player
                 Visual = item.CarryVisual,
                 RestScale = item.CarryVisualRestScale
             };
-            landing.StateChanged = () => StopLanding(landing);
-            item.StateChanged += landing.StateChanged;
+            landing.StateChanged = (rat, previous, next) => StopLanding(landing);
+            landing.Released = rat => StopLanding(landing);
+            item.Agent.StateChanged += landing.StateChanged;
+            item.Agent.Released += landing.Released;
             _landings.Add(landing);
             Vector3 squash = landing.RestScale;
             squash.x *= 1f + clampedStrength * 0.5f;
@@ -254,7 +258,11 @@ namespace SiegeCore.Player
         private void StopLanding(Landing landing)
         {
             landing.Tween?.Kill();
-            if (landing.Item != null) landing.Item.StateChanged -= landing.StateChanged;
+            if (landing.Item != null)
+            {
+                landing.Item.Agent.StateChanged -= landing.StateChanged;
+                landing.Item.Agent.Released -= landing.Released;
+            }
             if (landing.Visual != null) landing.Visual.localScale = landing.RestScale;
             _landings.Remove(landing);
         }

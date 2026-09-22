@@ -8,34 +8,30 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 8591575405359856006, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Name
-      value: Rat_BBB
+    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Size.x
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Size.y
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Sprite
+      value:
+      objectReference: {fileID: 21300000, guid: 76e2351d7bb919745b0de9271e304e90, type: 3}
+    - target: {fileID: 2668117264886249552, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: _definition
+      value: 
+      objectReference: {fileID: 11400000, guid: 641967d997cb3574aa7a939331b74172, type: 2}
+    - target: {fileID: 3342614870958549493, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Radius
+      value: 1.1
       objectReference: {fileID: 0}
     - target: {fileID: 3342614870958549493, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
       propertyPath: m_Offset.y
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 3342614870958549493, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Radius
-      value: 1.1
-      objectReference: {fileID: 0}
-    - target: {fileID: 2989915881095887205, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: _shadowScale.y
-      value: 0.45
-      objectReference: {fileID: 0}
-    - target: {fileID: 2668117264886249552, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: _definition
-      value:
-      objectReference: {fileID: 11400000, guid: 641967d997cb3574aa7a939331b74172, type: 2}
-    - target: {fileID: 2723632910628179223, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: _groundSprite
-      value:
-      objectReference: {fileID: 21300000, guid: 76e2351d7bb919745b0de9271e304e90, type: 3}
-    - target: {fileID: 2723632910628179223, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: _projectileSprite
-      value:
-      objectReference: {fileID: 21300000, guid: 76e2351d7bb919745b0de9271e304e90, type: 3}
     - target: {fileID: 5806945637712280368, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
       propertyPath: m_LocalScale.x
       value: 0.7916666
@@ -52,17 +48,9 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Sprite
-      value:
-      objectReference: {fileID: 21300000, guid: 76e2351d7bb919745b0de9271e304e90, type: 3}
-    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Size.x
-      value: 4
-      objectReference: {fileID: 0}
-    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Size.y
-      value: 4
+    - target: {fileID: 8591575405359856006, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Name
+      value: Rat_BBB
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

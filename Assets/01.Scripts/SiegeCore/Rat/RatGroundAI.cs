@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using SiegeCore.Player;
+using SiegeCore.Combat;
 using CannonController = SiegeCore.Cannon.Cannon;
 using UnityEngine;
 using UnityEngine.Tilemaps;
@@ -8,7 +9,7 @@ namespace SiegeCore.Rat
 {
     [RequireComponent(typeof(RatAgent))]
     [RequireComponent(typeof(CarryableObject))]
-    public sealed class RatGroundAI : MonoBehaviour
+    public sealed class RatGroundAI : RatGroundBehaviour
     {
         public enum EnemyAssignment
         {
@@ -33,7 +34,7 @@ namespace SiegeCore.Rat
         private float _assignmentArrivalDistance = 0.35f;
 
         private RatAgent _agent;
-        private CarryableObject _carryable;
+        private RatFlightMotion _motion;
         private GroundBlocker _blocker;
         private GroundBlockTarget _blockTarget;
         private RatBattlefield _battlefield;
@@ -53,33 +54,29 @@ namespace SiegeCore.Rat
         private CannonController _assignedCannon;
 
         public EnemyAssignment Assignment { get; private set; }
-        public bool IsInfiltrated { get { return _isInfiltrated; } }
+        public override bool IsInfiltrated { get { return _isInfiltrated; } }
 
-        public bool IsMoving { get; private set; }
+        private bool _isMoving;
+        public override bool IsMoving { get { return _isMoving; } }
 
-        public Vector2 MoveDirection { get; private set; }
+        private Vector2 _moveDirection;
+        public override Vector2 MoveDirection { get { return _moveDirection; } }
 
         private void Awake()
         {
             _agent = GetComponent<RatAgent>();
-            _carryable = GetComponent<CarryableObject>();
+            _motion = GetComponent<RatFlightMotion>();
             _blocker = GetComponent<GroundBlocker>();
             _blockTarget = GetComponent<GroundBlockTarget>();
         }
 
-        private void OnEnable()
-        {
-            _agent.StateChanged += HandleStateChanged;
-        }
 
-        private void OnDisable()
-        {
-            _agent.StateChanged -= HandleStateChanged;
-            ResetForSpawn();
-        }
+
+
 
         private void FixedUpdate()
         {
+            if (!_agent.IsSpawned) return;
             ResolveBattlefield();
 
             if (_battlefield == null)
@@ -106,8 +103,7 @@ namespace SiegeCore.Rat
             }
         }
 
-        private void HandleStateChanged(
-            RatAgent agent,
+        public override void OnRatStateChanged(
             RatState previousState,
             RatState nextState)
         {
@@ -315,7 +311,7 @@ namespace SiegeCore.Rat
 
                 float distance =
                     ((Vector2)candidate.transform.position
-                    - _carryable.PhysicsPosition).sqrMagnitude;
+                    - _motion.PhysicsPosition).sqrMagnitude;
 
                 float detectionRadius =
                     _agent.Definition.Ground.DetectionRadius;
@@ -390,7 +386,7 @@ namespace SiegeCore.Rat
             }
 
             float distance = Vector2.Distance(
-                _carryable.PhysicsPosition,
+                _motion.PhysicsPosition,
                 target.transform.position);
 
             if (distance <= _agent.Definition.Ground.AttackRange)
@@ -419,8 +415,7 @@ namespace SiegeCore.Rat
             _nextAttackTime =
                 Time.time + _agent.Definition.Ground.AttackInterval;
 
-            target.TakeDamage(
-                _agent.Definition.Ground.AttackDamage);
+            ApplyAttack(target);
         }
 
         private RatAgent GetBlockingEnemy()
@@ -447,7 +442,7 @@ namespace SiegeCore.Rat
             RatStructure target)
         {
             float distance = Vector2.Distance(
-                _carryable.PhysicsPosition,
+                _motion.PhysicsPosition,
                 target.transform.position);
 
             if (distance <= _agent.Definition.Ground.AttackRange)
@@ -471,9 +466,17 @@ namespace SiegeCore.Rat
             _nextAttackTime =
                 Time.time + _agent.Definition.Ground.AttackInterval;
 
-            target.TakeDamage(
-                _agent.Faction,
-                _agent.Definition.Ground.AttackDamage);
+            ApplyAttack(target);
+        }
+
+        private void ApplyAttack(IDamageable target)
+        {
+            target.TakeDamage(new DamageData
+            {
+                AttackerSide = _agent.Faction,
+                Damage = _agent.Definition.Ground.AttackDamage,
+                HitPoint = transform.position
+            });
         }
 
         private void UpdateDestroyedEntrance(GroundGate gate)
@@ -483,7 +486,7 @@ namespace SiegeCore.Rat
                 : gate.BasePosition;
 
             if (Vector2.Distance(
-                    _carryable.PhysicsPosition,
+                    _motion.PhysicsPosition,
                     target) <= _agent.Definition.Ground.AttackRange)
             {
                 StopMovement();
@@ -494,7 +497,7 @@ namespace SiegeCore.Rat
             MoveToward(target);
         }
 
-        public void BeginArenaCombat()
+        public override void BeginArenaCombat()
         {
             Assignment = EnemyAssignment.None;
             _assignedGate = null;
@@ -503,7 +506,7 @@ namespace SiegeCore.Rat
             ResetPath();
         }
 
-        public void ResetForSpawn()
+        public override void ResetForSpawn()
         {
             Assignment = EnemyAssignment.None;
             _assignedGate = null;
@@ -517,7 +520,7 @@ namespace SiegeCore.Rat
             BeginIdleRest();
         }
 
-        public void BeginBaseInfiltration()
+        public override void BeginBaseInfiltration()
         {
             Assignment = EnemyAssignment.None;
             _assignedGate = null;
@@ -580,7 +583,7 @@ namespace SiegeCore.Rat
             }
 
             if (Vector2.Distance(
-                    _carryable.PhysicsPosition,
+                    _motion.PhysicsPosition,
                     target) <= _assignmentArrivalDistance)
             {
                 StopMovement();
@@ -666,15 +669,15 @@ namespace SiegeCore.Rat
                 return;
             }
 
-            Vector2 current = _carryable.PhysicsPosition;
+            Vector2 current = _motion.PhysicsPosition;
             Vector2 target = _path[_waypointIndex];
 
             Vector2 delta = target - current;
 
             if (delta.sqrMagnitude > 0.0001f)
             {
-                MoveDirection = delta.normalized;
-                IsMoving = true;
+                _moveDirection = delta.normalized;
+                _isMoving = true;
             }
 
             Vector2 next = Vector2.MoveTowards(
@@ -682,7 +685,7 @@ namespace SiegeCore.Rat
                 target,
                 speed * Time.fixedDeltaTime);
 
-            if (!_carryable.TryMoveOnGround(next))
+            if (!_motion.TryMoveOnGround(next))
             {
                 ResetPath();
                 StopMovement();
@@ -697,8 +700,8 @@ namespace SiegeCore.Rat
 
         private void StopMovement()
         {
-            IsMoving = false;
-            MoveDirection = Vector2.zero;
+            _isMoving = false;
+            _moveDirection = Vector2.zero;
         }
     }
 }

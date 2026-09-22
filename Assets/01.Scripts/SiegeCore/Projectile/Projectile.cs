@@ -19,7 +19,7 @@ namespace SiegeCore.Projectile
     public sealed class Projectile : MonoBehaviour
     {
         private RatAgent _agent;
-        private CarryableObject _carryable;
+        private RatFlightMotion _motion;
 
         private bool _isActive;
         private bool _resolved;
@@ -36,7 +36,7 @@ namespace SiegeCore.Projectile
 
         public float Height
         {
-            get { return _carryable.Height; }
+            get { return _motion.Height; }
         }
 
         public bool IsCannonFlight
@@ -52,7 +52,7 @@ namespace SiegeCore.Projectile
         private void Awake()
         {
             _agent = GetComponent<RatAgent>();
-            _carryable = GetComponent<CarryableObject>();
+            _motion = GetComponent<RatFlightMotion>();
 
             Collider2D collider = GetComponent<Collider2D>();
             collider.isTrigger = true;
@@ -62,13 +62,13 @@ namespace SiegeCore.Projectile
         {
             ResetForPool();
             _agent.StateChanged += HandleStateChanged;
-            _carryable.StateChanged += HandleCarryableStateChanged;
+            _motion.Settled += HandleCarryableStateChanged;
         }
 
         private void OnDisable()
         {
             _agent.StateChanged -= HandleStateChanged;
-            _carryable.StateChanged -= HandleCarryableStateChanged;
+            _motion.Settled -= HandleCarryableStateChanged;
 
             ResetForPool();
         }
@@ -90,7 +90,7 @@ namespace SiegeCore.Projectile
 
         private void HandleCarryableStateChanged()
         {
-            if (_isActive && !_carryable.IsCannonFlight)
+            if (_isActive && !_motion.IsCannonFlight)
             {
                 Resolve();
             }

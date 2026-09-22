@@ -58,7 +58,7 @@ namespace SiegeCore.Rat
                     transform.position,
                     rat.Faction));
 
-            RatGroundAI groundAI = rat.GetComponent<RatGroundAI>();
+            RatGroundBehaviour groundAI = rat.GroundBehaviour;
             if (groundAI != null)
             {
                 groundAI.BeginBaseInfiltration();
@@ -168,7 +168,7 @@ namespace SiegeCore.Rat
         {
             rat.EnterGroundCombat(_factory, destination);
 
-            RatGroundAI groundAI = rat.GetComponent<RatGroundAI>();
+            RatGroundBehaviour groundAI = rat.GroundBehaviour;
             if (groundAI != null)
             {
                 groundAI.BeginArenaCombat();

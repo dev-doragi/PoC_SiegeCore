@@ -114,6 +114,7 @@ public static class SiegePocValidation
         Check(factory.IsReady, "Scene pools ready");
         ClearRats();
         RatRefactorValidation.Run(factory);
+        RatCompositionValidation.Run(factory);
         ValidateActions(factory);
         foreach (ProjectileEndReason reason in Enum.GetValues(typeof(ProjectileEndReason)))
         {
@@ -234,12 +235,12 @@ public static class SiegePocValidation
         first.LaunchFromBat(Vector2.right, 12, 0, 0, 3, 123, true, null);
         // Advance to the moving phase; initial bat impact intentionally holds velocity at zero.
         first.ContinueAfterCollisionFusion(safe, 0, 0, Vector2.right * 12, 123, 3, null);
-        Check((bool)Call(first.Carryable, "TryBeginCollisionFusion", second.Carryable), "Full charge B+B fusion");
+        Check((bool)Call(first.GetComponent<RatCollisionFusion>(), "TryBeginCollisionFusion", second.GetComponent<RatCollisionFusion>()), "Full charge B+B fusion");
         RatAgent merged = RatAgent.Active.Single(rat => !rat.IsDead);
         Check(merged.Definition == Rank2Definition
             && Mathf.Approximately(merged.GetComponent<Rigidbody2D>().linearVelocity.x, 12), "BB preserves launch speed");
         RatAgent third = factory.Spawn(BasicDefinition, VehicleSide.Ally, merged.transform.position);
-        Check((bool)Call(merged.Carryable, "TryBeginCollisionFusion", third.Carryable), "Chained BB+B fusion");
+        Check((bool)Call(merged.GetComponent<RatCollisionFusion>(), "TryBeginCollisionFusion", third.GetComponent<RatCollisionFusion>()), "Chained BB+B fusion");
         RatAgent bbb = RatAgent.Active.Single(rat => !rat.IsDead);
         Check(bbb.Definition == Rank3Definition
             && Mathf.Approximately(bbb.GetComponent<Rigidbody2D>().linearVelocity.x, 12), "BBB preserves launch speed");

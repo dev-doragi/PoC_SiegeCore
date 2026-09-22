@@ -53,6 +53,7 @@ namespace SiegeCore.Rat
                 RatAgent prefab = entry.Pool != null && entry.Pool.Prefab != null
                     ? entry.Pool.Prefab.GetComponent<RatAgent>() : null;
                 if (entry.Definition == null || prefab == null || prefab.Definition != entry.Definition
+                    || !HasValidComposition(prefab)
                     || _poolLookup.ContainsKey(entry.Definition))
                 {
                     Debug.LogError("[RatFactory] Each entry needs a unique Definition and a pool prefab with the same Definition.", this);
@@ -71,6 +72,21 @@ namespace SiegeCore.Rat
             }
 
             return _lookupValid;
+        }
+
+        public static bool HasValidComposition(RatAgent prefab)
+        {
+            if (prefab == null) return false;
+            RatFlightMotion motion = prefab.GetComponent<RatFlightMotion>();
+            RatPresenter presentation = prefab.GetComponent<RatPresenter>();
+            SiegeCore.Player.CarryableObject carryable = prefab.GetComponent<SiegeCore.Player.CarryableObject>();
+            if (motion == null || !motion.enabled || presentation == null || !presentation.enabled || !presentation.IsConfigured
+                || carryable == null || !carryable.enabled || !prefab.enabled
+                || prefab.GetComponents<RatGroundBehaviour>().Length > 1) return false;
+            SiegeCore.Projectile.Projectile projectile = prefab.GetComponent<SiegeCore.Projectile.Projectile>();
+            if (prefab.Definition != null && prefab.Definition.ProjectileAbility != null
+                && (projectile == null || !projectile.enabled)) return false;
+            return true;
         }
 
         public RatAgent Spawn(RatDefinition definition, VehicleSide faction, Vector3 position,
@@ -99,6 +115,7 @@ namespace SiegeCore.Rat
 
             rat.transform.SetPositionAndRotation(position, Quaternion.identity);
             rat.ResetRat(faction, this, combat, falling);
+            rat.CompleteSpawn();
             return rat;
         }
 

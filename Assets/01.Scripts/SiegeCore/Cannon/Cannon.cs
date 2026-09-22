@@ -190,19 +190,25 @@ namespace SiegeCore.Cannon
 
         public bool TryLoad(CarryableObject item, out string reason)
         {
+            return TryLoadRat(item != null ? item.Agent : null, false, out reason);
+        }
+
+        internal bool TryLoadIdle(RatAgent rat)
+        {
+            return TryLoadRat(rat, true, out string reason);
+        }
+
+        private bool TryLoadRat(RatAgent rat, bool fromIdle, out string reason)
+        {
             reason = null;
             if (!isActiveAndEnabled) reason = "Cannon is disabled";
-            // Loading is independent of installation; only firing requires a source slot.
             else if (_storagePoint == null) reason = "StoragePoint is missing";
             else if (IsFull) reason = "Queue is full";
-            else if (item == null || !item.TryEnterCannon(_storagePoint)) reason = "Ammo is not eligible for loading";
+            else if (rat == null || !rat.TryEnterCannon(_storagePoint, fromIdle)) reason = "Ammo is not eligible for loading";
             if (reason != null) return false;
 
-            if (!_magazine.TryEnqueue(item))
-            {
-                item.Drop(_storagePoint.position);
-                return false;
-            }
+            // Capacity is checked before the Rat commits its loaded state.
+            _magazine.Enqueue(rat);
             StartFiringIfNeeded();
             return true;
         }
@@ -230,20 +236,12 @@ namespace SiegeCore.Cannon
                     Debug.LogError("[Cannon] Target cannon or Target Slot must provide a fire position.", this);
                     continue;
                 }
-                CarryableObject loadedObject = _magazine.Peek();
-                RatAgent rat = loadedObject.GetComponent<RatAgent>();
-                if (rat == null)
+                RatAgent rat = _magazine.Peek();
+                if (rat.LaunchFromCannon(_muzzle.position, targetPosition, _sourceSlot.VehicleSide,
+                    _sourceSlot, _trajectoryType, _projectileFlightDuration, _projectileArcHeight))
                 {
-                    Debug.LogError("[Cannon] Only Rat ammunition can be fired.", loadedObject);
-                    _magazine.Dequeue();
-                    loadedObject.Drop(_storagePoint.position);
-                    continue;
+                    _magazine.Remove(rat);
                 }
-
-                _magazine.Dequeue();
-                rat.LaunchFromCannon(_muzzle.position, targetPosition, _sourceSlot.VehicleSide,
-                    _sourceSlot,
-                    _trajectoryType, _projectileFlightDuration, _projectileArcHeight);
             }
             _fireRoutine = null;
         }
@@ -453,6 +451,7 @@ namespace SiegeCore.Cannon
 
         private void OnDestroy()
         {
+            if (_magazine != null) _magazine.ReleaseAll();
             KillCarryTweens();
             RestoreIgnoredCollisions();
             if (_throwMaterial != null) Destroy(_throwMaterial);

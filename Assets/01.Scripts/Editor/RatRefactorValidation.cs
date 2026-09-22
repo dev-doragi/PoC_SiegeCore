@@ -51,8 +51,8 @@ public static class RatRefactorValidation
             RatAgent rat = factory.Spawn(definition, VehicleSide.Ally, safe);
             Rigidbody2D body = rat.GetComponent<Rigidbody2D>();
             body.linearVelocity = Vector2.right * 12f;
-            float perRank = (float)Get(rat.Carryable, "_flightDecelerationPerRank");
-            Call(rat.Carryable, "ApplyRankFlightDeceleration");
+            float perRank = (float)Get(rat.Motion, "_flightDecelerationPerRank");
+            Call(rat.Motion, "ApplyRankFlightDeceleration");
             Check(Mathf.Approximately(body.linearVelocity.x, 12f - perRank * index * Time.fixedDeltaTime),
                 "Flight deceleration rank " + (index + 1));
             rat.Release();
@@ -162,9 +162,9 @@ public static class RatRefactorValidation
         try
         {
             lookup.Remove(definitions[1]);
-            Call(first.Carryable, "TryBeginCollisionFusion", second.Carryable);
+            Call(first.GetComponent<RatCollisionFusion>(), "TryBeginCollisionFusion", second.GetComponent<RatCollisionFusion>());
             Check(RatAgent.Active.Count == 2 && first.isActiveAndEnabled && second.isActiveAndEnabled
-                && !(bool)Get(first.Carryable, "_fusionLocked") && !(bool)Get(second.Carryable, "_fusionLocked"),
+                && !first.Carryable.IsFusionLocked && !second.Carryable.IsFusionLocked,
                 "Failed collision spawn retains and unlocks inputs");
         }
         finally { lookup[definitions[1]] = pool; Clear(); }
@@ -173,7 +173,7 @@ public static class RatRefactorValidation
     private static void AddHeld(RatFactory factory, CarryController carry, RatDefinition definition)
     {
         RatAgent rat = factory.Spawn(definition, VehicleSide.Ally, carry.transform.position);
-        Check((bool)Call(rat.Carryable, "TryAttachToCarrySlot", carry.GetHoldPoint(carry.HeldCount)), "Attach validation rat");
+        Check(rat.TryAttachToCarrySlot(carry.GetHoldPoint(carry.HeldCount)), "Attach validation rat");
         ((List<ICarryable>)Get(carry, "_heldObjects")).Add(rat.Carryable);
     }
 

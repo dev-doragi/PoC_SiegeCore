@@ -70,7 +70,7 @@ namespace SiegeCore.Ground
                     ? (_verticalSpeed > 0.001f
                         ? _height / _verticalSpeed
                         : 0f)
-                    : (_verticalSpeed + impactSpeed) / _gravity;
+                    : (-_verticalSpeed + impactSpeed) / _gravity;
 
                 if (impactTime > remainingTime)
                 {
@@ -96,7 +96,9 @@ namespace SiegeCore.Ground
                     continue;
                 }
 
-                _verticalSpeed = bounceSpeed;
+                // Falling speed is positive. A bounce starts with an upward
+                // speed, so it must be negative in this convention.
+                _verticalSpeed = -bounceSpeed;
             }
         }
 

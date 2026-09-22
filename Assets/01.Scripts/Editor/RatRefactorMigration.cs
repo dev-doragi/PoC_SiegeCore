@@ -83,7 +83,7 @@ public static class RatRefactorMigration
             try
             {
                 CarryableObject carryable = root.GetComponent<CarryableObject>();
-                SerializedObject settings = new SerializedObject(carryable);
+                SerializedObject settings = new SerializedObject(carryable.GetComponent<RatCollisionFusion>());
                 SerializedProperty property = settings.FindProperty("_mergeResolver");
                 if (property.objectReferenceValue != resolver)
                 {
@@ -116,7 +116,7 @@ public static class RatRefactorMigration
                 foreach (CarryableObject carryable in root.GetComponentsInChildren<CarryableObject>(true))
                 {
                     if (carryable.GetComponent<RatAgent>() != null)
-                        SetReference(carryable, "_mergeResolver", resolver);
+                        SetReference(carryable.GetComponent<RatCollisionFusion>(), "_mergeResolver", resolver);
                 }
             }
             AssetDatabase.SaveAssets();

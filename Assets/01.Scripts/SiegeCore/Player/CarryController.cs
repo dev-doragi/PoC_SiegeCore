@@ -95,7 +95,7 @@ namespace SiegeCore.Player
         {
             int count = HeldCount;
             if (count < 2 || result == null
-                || !result.Carryable.TryAttachToCarrySlot(GetHoldPoint(count - 2))) return false;
+                || !result.TryAttachToCarrySlot(GetHoldPoint(count - 2))) return false;
             for (int index = count - 1; index >= count - 2; index--)
             {
                 ICarryable item = _heldObjects[index];
@@ -220,7 +220,7 @@ namespace SiegeCore.Player
         private bool TryCompleteCatch(CarryableObject item, Transform point)
         {
             if (item == null || point == null || !IsInsideCatchArea(item.CatchVisualPosition)
-                || !item.TryCatch(point, _catchTweenDuration)) return false;
+                || !item.Agent.TryCatch(point, _catchTweenDuration)) return false;
             _heldObjects.Add(item);
             CaptureCarrySorting(item);
             RefreshCarrySorting();
@@ -327,18 +327,6 @@ namespace SiegeCore.Player
             return true;
         }
 
-        // A cannon can accept the object at its loading point without enabling its physics.
-        public bool TryTransferHeldObject(Transform destination, out CarryableObject item)
-        {
-            item = null;
-            CarryableObject carryableObject = HeldObject as CarryableObject;
-            if (!HasHeldObject || carryableObject == null || !carryableObject.TransferTo(destination)) return false;
-            item = carryableObject;
-            RestoreCarrySorting(carryableObject);
-            _heldObjects.RemoveAt(_heldObjects.Count - 1);
-            return true;
-        }
-
         public Transform GetHoldPoint(int index)
         {
             if (index < 0) return null;
@@ -359,6 +347,11 @@ namespace SiegeCore.Player
                 changed = true;
             }
             if (!changed) return;
+            ReflowHeldObjects();
+        }
+
+        private void ReflowHeldObjects()
+        {
             for (int index = 0; index < _heldObjects.Count; index++)
             {
                 Transform point = GetHoldPoint(index);
@@ -399,11 +392,23 @@ namespace SiegeCore.Player
             sorting.OrderSpan = renderers.Length > 0 ? maximumOrder - sorting.MinimumOrder + 1 : 1;
             _carrySorting.Add(item, sorting);
             if (item is IThrowable throwable) throwable.GroundSortingRequested += HandleGroundSortingRequested;
+            if (item is CarryableObject ratItem) ratItem.Agent.Released += HandleRatReleased;
+        }
+
+        private void HandleRatReleased(RatAgent rat)
+        {
+            RestoreCarrySorting(rat.Carryable);
+            if (_heldObjects.Remove(rat.Carryable)) ReflowHeldObjects();
         }
 
         private void HandleGroundSortingRequested(IThrowable item)
         {
             RestoreCarrySorting(item);
+            Component component = item as Component;
+            if (component == null || !component.gameObject.activeInHierarchy || !item.IsCarried)
+            {
+                if (_heldObjects.Remove(item)) ReflowHeldObjects();
+            }
         }
 
         private void RefreshCarrySorting()
@@ -428,6 +433,7 @@ namespace SiegeCore.Player
         {
             if (!_carrySorting.TryGetValue(item, out CarrySorting sorting)) return;
             if (item is IThrowable throwable) throwable.GroundSortingRequested -= HandleGroundSortingRequested;
+            if (item is CarryableObject ratItem) ratItem.Agent.Released -= HandleRatReleased;
             for (int index = 0; index < sorting.Renderers.Length; index++)
             {
                 Renderer renderer = sorting.Renderers[index];

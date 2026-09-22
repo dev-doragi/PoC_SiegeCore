@@ -9,10 +9,6 @@ PrefabInstance:
     m_TransformParent: {fileID: 0}
     m_Modifications:
     - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: m_Sprite
-      value: 
-      objectReference: {fileID: 21300000, guid: 06685b7fb7289864d8ca7a1e0beb3e48, type: 3}
-    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
       propertyPath: m_Color.b
       value: 1
       objectReference: {fileID: 0}
@@ -24,14 +20,14 @@ PrefabInstance:
       propertyPath: m_Color.r
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 1141590451083670420, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
+      propertyPath: m_Sprite
+      value:
+      objectReference: {fileID: 21300000, guid: 06685b7fb7289864d8ca7a1e0beb3e48, type: 3}
     - target: {fileID: 2668117264886249552, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
       propertyPath: _definition
       value: 
       objectReference: {fileID: 11400000, guid: c23f4a5b6c7d8e9f0123456789abcdef, type: 2}
-    - target: {fileID: 2723632910628179223, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
-      propertyPath: _projectileSprite
-      value: 
-      objectReference: {fileID: 21300000, guid: 06685b7fb7289864d8ca7a1e0beb3e48, type: 3}
     - target: {fileID: 3342614870958549493, guid: db82100d4948d364fbe2417210e1e51d, type: 3}
       propertyPath: m_Radius
       value: 0.7

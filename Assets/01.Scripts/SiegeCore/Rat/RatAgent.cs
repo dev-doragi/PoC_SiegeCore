@@ -43,8 +43,12 @@ namespace SiegeCore.Rat
         [SerializeField, Min(0f)] private float _enemyGroggyDuration = 3f;
 
         private CarryableObject _carryable;
+        private RatFlightMotion _motion;
+        public RatFlightMotion Motion { get { return _motion; } }
+        public bool IsSpawned { get; private set; }
         private RatFactory _factory;
-        private RatGroundAI _groundAI;
+        private RatGroundBehaviour _groundBehaviour;
+        public RatGroundBehaviour GroundBehaviour { get { return _groundBehaviour; } }
         private GroundBlocker _groundBlocker;
         private GroundBlockTarget _groundBlockTarget;
         private PooledObject _pooledObject;
@@ -56,7 +60,6 @@ namespace SiegeCore.Rat
 
         private float _landingGroggyDuration;
         private float _groggyUntil;
-        private bool _suppressCarryEvent;
 
         [NonSerialized]
         private readonly List<StateTransition> _stateHistory =
@@ -64,6 +67,7 @@ namespace SiegeCore.Rat
 
         public event Action<RatAgent, RatState, RatState> StateChanged;
         public event Action<RatAgent> Died;
+        public event Action<RatAgent> Released;
 
         public RatDefinition Definition
         {
@@ -165,7 +169,7 @@ namespace SiegeCore.Rat
         {
             get
             {
-                if (_state != RatState.Airborne || !_carryable.CanBeCaughtInFlight)
+                if (_state != RatState.Airborne || !_motion.CanBeCaughtInFlight)
                 {
                     return false;
                 }
@@ -206,38 +210,41 @@ namespace SiegeCore.Rat
         private void Awake()
         {
             _carryable = GetComponent<CarryableObject>();
-            _groundAI = GetComponent<RatGroundAI>();
+            _motion = GetComponent<RatFlightMotion>();
+            _groundBehaviour = GetComponent<RatGroundBehaviour>();
             _groundBlocker = GetComponent<GroundBlocker>();
             _groundBlockTarget = GetComponent<GroundBlockTarget>();
             _pooledObject = GetComponent<PooledObject>();
             _projectile = GetComponent<SiegeCore.Projectile.Projectile>();
 
-            if (_definition == null)
+            if (_definition == null || _motion == null)
             {
-                Debug.LogError("[RatAgent] RatDefinition is not assigned.", this);
+                Debug.LogError("[RatAgent] RatDefinition and RatFlightMotion are required.", this);
                 enabled = false;
                 return;
             }
 
-            _carryable.StateChanged += HandleCarryStateChanged;
+            _motion.Settled += HandleGrounded;
         }
 
         private void OnEnable()
         {
-            Active.Add(this);
             _stateHistory.Clear();
         }
 
         private void OnDisable()
         {
             Active.Remove(this);
+            IsSpawned = false;
+            Released?.Invoke(this);
+            if (_groundBehaviour != null) _groundBehaviour.ResetForSpawn();
             // Lifecycle cleanup must not publish gameplay transitions.
             _state = RatState.Idle;
             _groundReturnState = RatState.Idle;
             _landingState = RatState.Idle;
             _groggyUntil = 0f;
             _landingGroggyDuration = 0f;
-            _suppressCarryEvent = false;
+
             ProjectileSourceSlot = null;
             AttackSide = Faction;
             Health = 0f;
@@ -254,6 +261,64 @@ namespace SiegeCore.Rat
             }
         }
 
+        internal void CompleteSpawn()
+        {
+            IsSpawned = true;
+            Active.Add(this);
+            if (_groundBehaviour != null && _groundBehaviour.enabled) _groundBehaviour.OnRatStateChanged(_state, _state);
+            StateChanged?.Invoke(this, _state, _state);
+        }
+
+        public bool CanLoadIntoCannon
+        {
+            get { return IsSpawned && !IsDead && _motion.CanEnterCannon; }
+        }
+
+        public bool TryCatch(Transform holdPoint, float duration)
+        {
+            if (!IsSpawned || !CanBeCaught || !_carryable.Attach(holdPoint, true, duration)) return false;
+            EnterCarried();
+            return true;
+        }
+
+        public bool TryAttachToCarrySlot(Transform holdPoint)
+        {
+            if (!IsSpawned || !CanPickUp || !_carryable.Attach(holdPoint, false)) return false;
+            EnterCarried();
+            return true;
+        }
+
+        public bool TryThrow(Vector2 direction, Vector3 groundPosition, Collider2D[] throwerColliders)
+        {
+            if (!IsSpawned || _state != RatState.Carried || !_motion.TryThrow(direction, groundPosition, throwerColliders)) return false;
+            HandleAirborneStarted();
+            return true;
+        }
+
+        public bool TryDispense(Vector2 direction, float speed)
+        {
+            if (!IsSpawned || IsDead || !_motion.TryDispense(_factory.Battlefield.Ground, direction, speed)) return false;
+            HandleAirborneStarted();
+            return true;
+        }
+
+        public void BeginFall(float height)
+        {
+            if (!IsSpawned || IsDead) return;
+            BeginAirborne(_groundReturnState, 0f);
+            _motion.BeginRatFall(_factory.Battlefield.Ground, height);
+        }
+
+        internal bool TryEnterCannon(Transform storagePoint, bool fromIdle = false)
+        {
+            if (!IsSpawned || IsDead || _projectile == null) return false;
+            if (fromIdle && _state != RatState.Idle) return false;
+            if (!fromIdle && !CanLoadIntoCannon) return false;
+            if (!_motion.TryEnterCannon(storagePoint, fromIdle)) return false;
+            EnterLoaded();
+            return true;
+        }
+
         public void ClearStateHistory()
         {
             _stateHistory.Clear();
@@ -261,9 +326,9 @@ namespace SiegeCore.Rat
 
         private void OnDestroy()
         {
-            if (_carryable != null)
+            if (_motion != null)
             {
-                _carryable.StateChanged -= HandleCarryStateChanged;
+                _motion.Settled -= HandleGrounded;
             }
         }
 
@@ -305,24 +370,20 @@ namespace SiegeCore.Rat
             _groundReturnState = groundState;
             _landingState = groundState;
 
-            if (_groundAI != null)
+            if (_groundBehaviour != null)
             {
-                _groundAI.ResetForSpawn();
+                _groundBehaviour.ResetForSpawn();
             }
 
-            _suppressCarryEvent = true;
-            _carryable.ResetForRat(factory.Battlefield.Ground);
-            _suppressCarryEvent = false;
+            _motion.ResetForRat(factory.Battlefield.Ground);
 
             if (falling)
             {
                 BeginAirborne(groundState, 0f);
 
-                _suppressCarryEvent = true;
-                _carryable.BeginRatFall(
+                _motion.BeginRatFall(
                     factory.Battlefield.Ground,
                     1.5f);
-                _suppressCarryEvent = false;
 
                 return;
             }
@@ -355,44 +416,12 @@ namespace SiegeCore.Rat
                 previousState,
                 nextState));
 
+            if (_groundBehaviour != null && _groundBehaviour.enabled) _groundBehaviour.OnRatStateChanged(previousState, nextState);
+
             StateChanged?.Invoke(
                 this,
                 previousState,
                 nextState);
-        }
-
-        private void HandleCarryStateChanged()
-        {
-            if (_suppressCarryEvent || _state == RatState.Dead)
-            {
-                return;
-            }
-
-            if (_carryable.IsCannonFlight)
-            {
-                ChangeState(RatState.CannonFlight);
-                return;
-            }
-
-            if (_carryable.IsLoaded)
-            {
-                EnterLoaded();
-                return;
-            }
-
-            if (_carryable.IsCarried)
-            {
-                EnterCarried();
-                return;
-            }
-
-            if (_carryable.IsAirborne)
-            {
-                HandleAirborneStarted();
-                return;
-            }
-
-            HandleGrounded();
         }
 
         // --------------------------------------------------------------------
@@ -528,7 +557,7 @@ namespace SiegeCore.Rat
                 returnState,
                 GetGroggyDuration());
 
-            bool launched = _carryable.TryDispense(
+            bool launched = _motion.TryDispense(
                 _factory.Battlefield.Ground,
                 direction.normalized,
                 throwHeight);
@@ -583,7 +612,7 @@ namespace SiegeCore.Rat
 
             ChangeState(RatState.Airborne);
 
-            bool launched = _carryable.TryBatLaunch(
+            bool launched = _motion.TryBatLaunch(
                 _factory.Battlefield.Ground,
                 direction.normalized,
                 horizontalSpeed,
@@ -625,8 +654,7 @@ namespace SiegeCore.Rat
             _groggyUntil = 0f;
             ChangeState(RatState.Airborne);
 
-            _suppressCarryEvent = true;
-            _carryable.BeginCollisionFusionFlight(
+            _motion.BeginCollisionFusionFlight(
                 _factory.Battlefield.Ground,
                 groundPosition,
                 height,
@@ -635,7 +663,7 @@ namespace SiegeCore.Rat
                 swingId,
                 collisionFusionMinimumSpeed,
                 returnTarget);
-            _suppressCarryEvent = false;
+
         }
 
         // 이전 RatMelee 호출과의 호환 진입점.
@@ -701,7 +729,7 @@ namespace SiegeCore.Rat
                 }
 
                 Vector3 floor = _factory.Battlefield.NearestFloor(transform.position, Faction);
-                _carryable.Drop(floor);
+                _carryable.DropToGround(floor);
                 ChangeState(_groundReturnState);
             }
         }
@@ -728,10 +756,8 @@ namespace SiegeCore.Rat
 
             _factory = factory;
 
-            _suppressCarryEvent = true;
-            _carryable.ResetForRat(
+            _motion.ResetForRat(
                 factory.Battlefield.Ground);
-            _suppressCarryEvent = false;
 
             transform.position = position;
 
@@ -759,13 +785,13 @@ namespace SiegeCore.Rat
                 return;
             }
 
-            _carryable.RelocateAirborne(position);
+            _motion.RelocateAirborne(position);
         }
 
         /// <summary>강제 전체 Drop에서 Carry 상태와 실제 Carryable 상태를 함께 정리한다.</summary>
         public void DropFromCarry(Vector3 position)
         {
-            if (_state != RatState.Carried || !_carryable.IsCarried)
+            if (_state != RatState.Carried || !_motion.IsCarried)
             {
                 return;
             }
@@ -776,40 +802,15 @@ namespace SiegeCore.Rat
                 floor = _factory.Battlefield.NearestFloor(position, Faction);
             }
 
-            _suppressCarryEvent = true;
-            _carryable.Drop(floor);
-            _suppressCarryEvent = false;
+            _carryable.DropToGround(floor);
+
             _groggyUntil = 0f;
             ChangeState(_groundReturnState);
         }
 
         public bool TryLoadIntoCannon(SiegeCore.Cannon.Cannon cannon)
         {
-            if (_state != RatState.Idle
-                || cannon == null
-                || _factory == null)
-            {
-                return false;
-            }
-
-            BeginAirborne(RatState.Idle, 0f);
-
-            _suppressCarryEvent = true;
-            _carryable.BeginRatFall(
-                _factory.Battlefield.Ground,
-                0.1f);
-            _suppressCarryEvent = false;
-
-            if (cannon.TryLoad(_carryable))
-            {
-                EnterLoaded();
-                return true;
-            }
-
-            _carryable.ResetForRat(
-                _factory.Battlefield.Ground);
-            ChangeState(RatState.Idle);
-            return false;
+            return IsSpawned && _state == RatState.Idle && cannon != null && cannon.TryLoadIdle(this);
         }
 
         // --------------------------------------------------------------------
@@ -822,7 +823,7 @@ namespace SiegeCore.Rat
             ChangeState(RatState.Loaded);
         }
 
-        public void LaunchFromCannon(
+        public bool LaunchFromCannon(
             Vector3 startPosition,
             Vector3 targetPosition,
             VehicleSide attackSide,
@@ -831,28 +832,25 @@ namespace SiegeCore.Rat
             float flightDuration,
             float arcHeight)
         {
-            if (_state == RatState.Dead
-                || !_carryable.IsLoaded)
+            if (!IsSpawned || _state != RatState.Loaded
+                || !_motion.IsLoaded)
             {
-                return;
+                return false;
             }
 
             AttackSide = attackSide;
             ProjectileSourceSlot = sourceSlot;
             _groggyUntil = 0f;
 
-            _suppressCarryEvent = true;
-
-            _carryable.LaunchFromCannon(
+            _motion.LaunchFromCannon(
                 startPosition,
                 targetPosition,
                 trajectoryType,
                 flightDuration,
                 arcHeight);
 
-            _suppressCarryEvent = false;
-
             ChangeState(RatState.CannonFlight);
+            return true;
         }
 
         // --------------------------------------------------------------------
@@ -861,7 +859,7 @@ namespace SiegeCore.Rat
 
         public void TakeDamage(float damage)
         {
-            if (_state == RatState.Dead || damage <= 0f)
+            if (!IsSpawned || _state == RatState.Dead || damage <= 0f)
             {
                 return;
             }
@@ -897,8 +895,7 @@ namespace SiegeCore.Rat
                 || ((_state == RatState.Airborne || _state == RatState.Groggy)
                     && (_groundReturnState == RatState.GroundCombat
                         || _landingState == RatState.GroundCombat));
-            RatGroundAI groundAI = GetComponent<RatGroundAI>();
-            bool infiltrated = groundAI != null && groundAI.IsInfiltrated;
+            bool infiltrated = _groundBehaviour != null && _groundBehaviour.IsInfiltrated;
             ChangeState(RatState.Dead);
 
             if (groundDeath && _definition.GroundDeathAbility != null)

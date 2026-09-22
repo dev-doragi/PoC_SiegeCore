@@ -319,7 +319,12 @@ namespace SiegeCore.Player
                 RatAgent rat = _targets[index];
                 if (rat.Faction == VehicleSide.Enemy)
                 {
-                    rat.TakeDamage(_enemyDamage);
+                    rat.TakeDamage(new SiegeCore.Combat.DamageData
+                    {
+                        AttackerSide = VehicleSide.Ally,
+                        Damage = _enemyDamage,
+                        HitPoint = rat.transform.position
+                    });
                     if (rat.State == RatState.Dead)
                     {
                         continue;
@@ -414,7 +419,7 @@ namespace SiegeCore.Player
                 RatAgent representative = GetRepresentativeTarget(aimDirection);
                 if (representative != null)
                 {
-                    start = representative.Carryable.PhysicsPosition;
+                    start = representative.Motion.PhysicsPosition;
                     if (!isFullCharge && representative.Definition != null)
                     {
                         verticalSpeed *= representative.Definition.VerticalImpulseMultiplier;

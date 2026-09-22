@@ -19,10 +19,10 @@ namespace SiegeCore.Rat
                     : battlefield.FloorBelow(spawnPosition, faction);
                 RatAgent rat = factory.Spawn(definition, faction, landingPosition, true, true);
                 if (rat == null) continue;
-                RatGroundAI groundAI = rat.GetComponent<RatGroundAI>();
+                RatGroundBehaviour groundAI = rat.GroundBehaviour;
                 if (infiltrated && groundAI != null) groundAI.BeginBaseInfiltration();
                 float fallHeight = Mathf.Max(0.1f, spawnPosition.y - landingPosition.y);
-                rat.Carryable.BeginRatFall(battlefield.Ground, fallHeight);
+                rat.BeginFall(fallHeight);
             }
         }
     }

@@ -18,6 +18,8 @@ GameObject:
   - component: {fileID: 3922576104541050906}
   - component: {fileID: 4012345678901234567}
   - component: {fileID: 4012345678901234568}
+  - component: {fileID: 8187076920275213150}
+  - component: {fileID: 4952492534850220026}
   m_Layer: 8
   m_Name: Rat_Basic
   m_TagString: Untagged
@@ -116,15 +118,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 055cbb4043834fb2bef4258adb7de816, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Player.CarryableObject
+  _compositionVersion: 1
   _mergeResolver: {fileID: 11400000, guid: b2fb1f523067866418dfd39e2fe6d587, type: 2}
   _groundTilemap: {fileID: 0}
   _snapSteering: 12
   _snapFinishDuration: 0.12
   _visual: {fileID: 5806945637712280368}
-  _shadowScale: {x: 1, y: 0.3}
-  _shadowAlpha: 0.35
-  _shadowAirScale: 0.6
-  _shadowOffset: {x: 0, y: -0.8}
   _throwSpeed: 3.5
   _upwardSpeed: 6
   _throwCellDistance: 2
@@ -136,7 +135,6 @@ MonoBehaviour:
   _impactStopDuration: 0.06
   _squashRecoveryDuration: 0.08
   _impactStopSpeedThreshold: 3
-  _squashRatio: 0.65
   _flightDecelerationPerRank: 1.5
   _fusionHeightTolerance: 0.45
   _popupVerticalSpeedMultiplier: 0.6
@@ -189,22 +187,9 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a0d616ed1b55c3469d2d4a6c648bee5, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatPresentation
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatPresenter
   _renderer: {fileID: 1141590451083670420}
-  _groundSprite: {fileID: 21300000, guid: 084044ac3dfcb804aaf7e7ef8bbe42d0, type: 3}
-  _projectileSprite: {fileID: 21300000, guid: d6470002e63e1504ab0b4874a9cfd0ee, type: 3}
-  _deadSprite: {fileID: 21300000, guid: 7f1237e1324f2f347a231683c63d3404, type: 3}
-  _allyColor: {r: 1, g: 1, b: 1, a: 1}
-  _enemyColor: {r: 1, g: 0.55, b: 0.55, a: 1}
-  _wiggleAmount: 0.09
-  _wiggleSpeed: 20
-  _bounceAmount: 0.08
-  _bounceSpeed: 16
-  _stretchAmount: 0.08
-  _idleBreathAmount: 0.025
-  _idleBreathSpeed: 3.2
-  _deathSinkDistance: 0.3
-  _deathDuration: 0.6
+  _visual: {fileID: 5806945637712280368}
 --- !u!114 &3922576104541050906
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -220,21 +205,75 @@ MonoBehaviour:
 --- !u!114 &4012345678901234567
 MonoBehaviour:
   m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8591575405359856006}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4c2d4a3f9ce84378a1b2c4d5e6f70819, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.GroundBlocker
 --- !u!114 &4012345678901234568
 MonoBehaviour:
   m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8591575405359856006}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5d3e5b4a0df95489b2c3d5e6f708192a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.GroundBlockTarget
+--- !u!114 &8187076920275213150
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8591575405359856006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b609860c664373840b4a929c296a4eb0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatFlightMotion
+  _groundTilemap: {fileID: 0}
+  _snapSteering: 12
+  _snapFinishDuration: 0.12
+  _throwSpeed: 3.5
+  _upwardSpeed: 6
+  _throwCellDistance: 2
+  _heightGravity: 16
+  _bounceRestitution: 0.45
+  _groundSpeedRetention: 0.65
+  _minimumBounceSpeed: 0.8
+  _wallRestitution: 0.5
+  _impactStopDuration: 0.06
+  _squashRecoveryDuration: 0.08
+  _impactStopSpeedThreshold: 3
+  _flightDecelerationPerRank: 1.5
+  _popupVerticalSpeedMultiplier: 0.6
+  _minimumPopupVerticalSpeed: 11
+  _maximumPopupVerticalSpeed: 12
+  _popupPlayerBlend: 0.35
+  _maximumPopupReturnSpeed: 8
+  _defaultCannonFlightDuration: 3
+  _defaultCannonArcHeight: 2
+--- !u!114 &4952492534850220026
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8591575405359856006}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d1ae9063bf2b1d408138e31fa8f56de, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SiegeCore.Rat.RatCollisionFusion
+  _mergeResolver: {fileID: 11400000, guid: b2fb1f523067866418dfd39e2fe6d587, type: 2}
+  _fusionHeightTolerance: 0.45
 --- !u!1 &8899446616154975823
 GameObject:
   m_ObjectHideFlags: 0

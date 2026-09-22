@@ -51,13 +51,21 @@ namespace SiegeCore.Summon
                 _rigidbody = GetComponent<Rigidbody2D>();
             }
 
-            if (battlefield != null)
+            if (battlefield != null
+                && battlefield.BattlefieldGround != null)
             {
-                Vector3 landingPosition = battlefield.FloorBelow(
-                    _rigidbody.position,
-                    attackerSide);
+                Vector3 landingPosition =
+                    battlefield.GetBattlefieldCenterAtX(
+                        _rigidbody.position.x);
                 _dropMotion.Begin(landingPosition, Detonate);
                 return;
+            }
+
+            if (battlefield != null)
+            {
+                Debug.LogError(
+                    "[NeutralBomb] BattlefieldGround is not assigned.",
+                    this);
             }
 
             _rigidbody.bodyType = RigidbodyType2D.Dynamic;

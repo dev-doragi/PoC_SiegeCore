@@ -8,12 +8,14 @@ namespace SiegeCore.Rat
     public sealed class RatBattlefield : MonoBehaviour
     {
         [SerializeField] private Tilemap _ground;
+        [SerializeField] private Tilemap _battlefieldGround;
         [SerializeField] private BoxCollider2D _safeZone;
         [SerializeField] private Transform _allyExit;
         [SerializeField] private Transform _enemyExit;
         [SerializeField] private GroundGate _allyGate;
         [SerializeField] private GroundGate _enemyGate;
         public Tilemap Ground { get { return _ground; } }
+        public Tilemap BattlefieldGround { get { return _battlefieldGround; } }
         public GroundGate AllyGate { get { return _allyGate; } }
         public GroundGate EnemyGate { get { return _enemyGate; } }
         private static readonly Vector3Int[] Directions = { Vector3Int.left, Vector3Int.right, Vector3Int.up, Vector3Int.down };
@@ -161,6 +163,60 @@ namespace SiegeCore.Rat
             return found
                 ? best
                 : NearestFloor(position, faction);
+        }
+
+        public Vector3 GetBattlefieldCenterAtX(float worldX)
+        {
+            if (_battlefieldGround == null)
+            {
+                Debug.LogError(
+                    "[RatBattlefield] BattlefieldGround Tilemap is not assigned.",
+                    this);
+                return new Vector3(worldX, transform.position.y, 0f);
+            }
+
+            BoundsInt cellBounds = _battlefieldGround.cellBounds;
+            Vector3Int minimumCell = new Vector3Int(
+                int.MaxValue,
+                int.MaxValue,
+                int.MaxValue);
+            Vector3Int maximumCell = new Vector3Int(
+                int.MinValue,
+                int.MinValue,
+                int.MinValue);
+            bool foundTile = false;
+
+            foreach (Vector3Int cell in cellBounds.allPositionsWithin)
+            {
+                if (!_battlefieldGround.HasTile(cell))
+                {
+                    continue;
+                }
+
+                minimumCell = Vector3Int.Min(minimumCell, cell);
+                maximumCell = Vector3Int.Max(maximumCell, cell);
+                foundTile = true;
+            }
+
+            if (!foundTile)
+            {
+                Debug.LogError(
+                    "[RatBattlefield] BattlefieldGround has no tiles.",
+                    this);
+                return new Vector3(worldX, transform.position.y, 0f);
+            }
+
+            Vector3 minimumWorldCenter =
+                _battlefieldGround.GetCellCenterWorld(minimumCell);
+            Vector3 maximumWorldCenter =
+                _battlefieldGround.GetCellCenterWorld(maximumCell);
+            Vector3 worldCenter =
+                (minimumWorldCenter + maximumWorldCenter) * 0.5f;
+
+            return new Vector3(
+                worldX,
+                worldCenter.y,
+                worldCenter.z);
         }
 
         public GroundGate GetOwnGate(VehicleSide faction)

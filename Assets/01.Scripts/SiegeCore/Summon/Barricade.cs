@@ -43,12 +43,19 @@ namespace SiegeCore.Summon
                 _visual.color = Color.white;
             }
 
-            if (battlefield != null)
+            if (battlefield != null
+                && battlefield.BattlefieldGround != null)
             {
-                Vector3 landingPosition = battlefield.FloorBelow(
-                    _rigidbody.position,
-                    owner);
+                Vector3 landingPosition =
+                    battlefield.GetBattlefieldCenterAtX(
+                        _rigidbody.position.x);
                 _dropMotion.Begin(landingPosition, null);
+            }
+            else if (battlefield != null)
+            {
+                Debug.LogError(
+                    "[Barricade] BattlefieldGround is not assigned.",
+                    this);
             }
         }
 

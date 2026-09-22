@@ -1,55 +1,47 @@
 using System.Collections.Generic;
-using SiegeCore.Player;
+using SiegeCore.Rat;
 
 namespace SiegeCore.Cannon
 {
     public sealed class CannonMagazine
     {
         private readonly int _capacity;
-        private readonly Queue<CarryableObject> _items = new Queue<CarryableObject>();
+        private readonly List<RatAgent> _items = new List<RatAgent>();
 
-        public CannonMagazine(int capacity)
-        {
-            _capacity = capacity < 1 ? 1 : capacity;
-        }
-
-        public int Count
-        {
-            get
-            {
-                RemoveMissingObjects();
-                return _items.Count;
-            }
-        }
-
+        public CannonMagazine(int capacity) { _capacity = capacity < 1 ? 1 : capacity; }
+        public int Count { get { return _items.Count; } }
         public bool IsFull { get { return Count >= _capacity; } }
 
-        public bool TryEnqueue(CarryableObject item)
+        internal void Enqueue(RatAgent rat)
         {
-            if (item == null || IsFull) return false;
-            _items.Enqueue(item);
-            return true;
+            _items.Add(rat);
+            rat.Released += Remove;
+            rat.Died += Remove;
+            rat.StateChanged += HandleStateChanged;
         }
 
-        public CarryableObject Peek()
+        public RatAgent Peek() { return _items.Count > 0 ? _items[0] : null; }
+
+        public void Remove(RatAgent rat)
         {
-            RemoveMissingObjects();
-            return _items.Count > 0 ? _items.Peek() : null;
+            if (!_items.Remove(rat)) return;
+            rat.Released -= Remove;
+            rat.Died -= Remove;
+            rat.StateChanged -= HandleStateChanged;
         }
 
-        public CarryableObject Dequeue()
+        private void HandleStateChanged(RatAgent rat, RatState previous, RatState next)
         {
-            RemoveMissingObjects();
-            return _items.Count > 0 ? _items.Dequeue() : null;
+            if (next != RatState.Loaded) Remove(rat);
         }
 
-        private void RemoveMissingObjects()
+        public void ReleaseAll()
         {
-            int count = _items.Count;
-            for (int index = 0; index < count; index++)
+            RatAgent[] items = _items.ToArray();
+            foreach (RatAgent rat in items)
             {
-                CarryableObject item = _items.Dequeue();
-                if (item != null && item.IsLoaded) _items.Enqueue(item);
+                Remove(rat);
+                if (rat != null && rat.IsSpawned) rat.Release();
             }
         }
     }

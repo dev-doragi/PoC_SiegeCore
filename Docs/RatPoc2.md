@@ -1,5 +1,7 @@
 # Siege Core PoC
 
+구조와 새 Rat 제작 절차: [SiegeCore 전투 기반](SiegeCoreArchitecture.md).
+
 ## 실행
 
 Unity 6000.3.9f1에서 `Assets/00.Scenes/PoC_SiegeCore.unity`를 열고 Play.
@@ -42,7 +44,7 @@ HP 30, 지상 공격력 9, Siege 피해 30.
 
 ## 씬과 조정
 
-- RatDefinition: B/BB/BBB 전투 능력치.
+- RatDefinition: B/BB/BBB 전투 능력치와 Rat별 시각 데이터.
 - RatCatalog: 모든 RatDefinition과 각 오브젝트 풀의 매핑, Basic Rank1 폴백.
 - RatLoadoutDefinition: 생산에 사용할 Rank1 Rat과 Copies. Dispenser별로 하나씩 연결한다.
 - RatDispenser: Loadout 덱 드로우, 생산시설 참조, 기본 간격, 최소 생산 비율, B 환산 상한.

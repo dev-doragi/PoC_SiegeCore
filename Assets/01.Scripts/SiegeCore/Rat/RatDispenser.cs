@@ -109,7 +109,7 @@ namespace SiegeCore.Rat
             if (rat == null) return;
 
             _loadoutRuntime.ConsumeNext();
-            rat.Carryable.TryDispense(_factory.Battlefield.Ground,
+            rat.TryDispense(
                 _ejectDirection.normalized, _ejectSpeed);
         }
 
